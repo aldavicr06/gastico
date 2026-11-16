@@ -117,8 +117,55 @@ export async function addTransaction(db: SQLiteDatabase, tx: NewTransaction) {
   return r.lastInsertRowId;
 }
 
+export function getTransaction(db: SQLiteDatabase, id: number) {
+  return db.getFirstAsync<Transaction>('SELECT * FROM transactions WHERE id = ?', id);
+}
+
+/** Editable fields only; source, receipt and created_at keep their values. */
+export type TransactionEdit = Pick<Transaction, 'type' | 'amount_cents' | 'category_id' | 'note' | 'merchant' | 'date'>;
+
+export function updateTransaction(db: SQLiteDatabase, id: number, tx: TransactionEdit) {
+  return db.runAsync(
+    `UPDATE transactions
+     SET type = ?, amount_cents = ?, category_id = ?, note = ?, merchant = ?, date = ?
+     WHERE id = ?`,
+    tx.type, tx.amount_cents, tx.category_id, tx.note, tx.merchant, tx.date, id,
+  );
+}
+
 export function deleteTransaction(db: SQLiteDatabase, id: number) {
   return db.runAsync('DELETE FROM transactions WHERE id = ?', id);
+}
+
+/** Puts a deleted transaction back exactly as it was (same id), for "Deshacer". */
+export function restoreTransaction(db: SQLiteDatabase, tx: Transaction) {
+  return db.runAsync(
+    `INSERT OR REPLACE INTO transactions
+       (id, type, amount_cents, category_id, note, merchant, date, source, receipt_uri, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    tx.id, tx.type, tx.amount_cents, tx.category_id, tx.note, tx.merchant, tx.date, tx.source, tx.receipt_uri, tx.created_at,
+  );
+}
+
+/** Total expenses between two ISO dates, inclusive. */
+export async function getExpenseTotal(db: SQLiteDatabase, from: string, to: string) {
+  const r = await db.getFirstAsync<{ total: number | null }>(
+    "SELECT SUM(amount_cents) AS total FROM transactions WHERE type = 'expense' AND date BETWEEN ? AND ?",
+    from, to,
+  );
+  return r?.total ?? 0;
+}
+
+/** Budget and spending of one category in a month ('YYYY-MM'). */
+export async function getCategoryMonth(db: SQLiteDatabase, categoryId: string, month: string) {
+  const r = await db.getFirstAsync<{ name: string; budget_cents: number | null; spent: number | null }>(
+    `SELECT c.name, c.budget_cents,
+       (SELECT SUM(amount_cents) FROM transactions
+        WHERE category_id = c.id AND type = 'expense' AND substr(date, 1, 7) = ?) AS spent
+     FROM categories c WHERE c.id = ?`,
+    month, categoryId,
+  );
+  return r ? { name: r.name, budget_cents: r.budget_cents, spent_cents: r.spent ?? 0 } : null;
 }
 
 /** Month is 'YYYY-MM'. */
@@ -131,6 +178,11 @@ export function getTransactionsForMonth(db: SQLiteDatabase, month: string, limit
      LIMIT ?`,
     month, limit,
   );
+}
+
+export async function countTransactions(db: SQLiteDatabase) {
+  const r = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM transactions');
+  return r?.n ?? 0;
 }
 
 export function getAllTransactions(db: SQLiteDatabase) {

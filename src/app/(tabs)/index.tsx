@@ -1,22 +1,58 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Donut } from '../../components/Donut';
 import { TransactionRow } from '../../components/TransactionRow';
 import { budgetColor, Card, Muted, ProgressBar, SectionTitle } from '../../components/ui';
 import { useApp } from '../../lib/app-context';
-import { getMonthSummary, getTransactionsForMonth } from '../../lib/db';
-import { currentMonth, formatCompact, formatMoney, monthLabel } from '../../lib/format';
+import { getExpenseTotal, getMonthSummary, getTransactionsForMonth } from '../../lib/db';
+import { CURRENCY_SYMBOL, currentMonth, daysInMonth, formatCompact, formatMoney, formatPercent, monthLabel, shiftMonth } from '../../lib/format';
 import { useData } from '../../lib/use-data';
+
+/** Same stretch of last month: 1st up to today's day (clamped to its length). */
+function previousPeriod(month: string, day: number) {
+  const prev = shiftMonth(month, -1);
+  const end = String(Math.min(day, daysInMonth(prev))).padStart(2, '0');
+  return { prev, from: `${prev}-01`, to: `${prev}-${end}` };
+}
+
+/** "Promedio diario ₡X · 12 % menos que octubre a esta fecha". */
+function spendingInsight(spent: number, prevSpent: number, day: number, prevMonth: string, fmt: (c: number) => string) {
+  if (spent === 0) return 'Aún no registras gastos este mes';
+  // Whole colones/dollars: an average with céntimos reads as noise.
+  const parts = [`Promedio diario ${fmt(Math.round(spent / day / 100) * 100)}`];
+  if (prevSpent > 0) {
+    const diff = Math.round(((spent - prevSpent) / prevSpent) * 100);
+    const prevName = monthLabel(prevMonth, false).toLowerCase();
+    parts.push(
+      diff === 0 ? `igual que ${prevName} a esta fecha`
+      : `${formatPercent(Math.abs(diff) / 100)} ${diff > 0 ? 'más' : 'menos'} que ${prevName} a esta fecha`,
+    );
+  }
+  return parts.join(' · ');
+}
+
+/**
+ * Biggest font (max 40) that fits `label` on one line in `width` px. Web has no
+ * adjustsFontSizeToFit, so measure: heavy digits are ~0.62 em wide.
+ */
+function fitFontSize(label: string, width: number) {
+  if (!width) return 40;
+  return Math.max(16, Math.min(40, Math.floor(width / (label.length * 0.62))));
+}
 
 export default function HomeScreen() {
   const { colors, currency } = useApp();
   const month = currentMonth();
+  const day = new Date().getDate();
+  const period = previousPeriod(month, day);
   const data = useData(async (db) => ({
     summary: await getMonthSummary(db, month),
     recent: await getTransactionsForMonth(db, month, 5),
-  }), [month]);
+    prevSpent: await getExpenseTotal(db, period.from, period.to),
+  }), [month, day]);
 
   const summary = data?.summary;
   const spent = summary?.expense_cents ?? 0;
@@ -25,7 +61,13 @@ export default function HomeScreen() {
   const ratio = budget > 0 ? spent / budget : 0;
   const slices = (summary?.byCategory ?? []).filter((c) => c.spent_cents > 0);
   const top = slices.slice(0, 5);
+  const spentLabel = formatMoney(spent, currency);
+  const [heroWidth, setHeroWidth] = useState(0);
   const isEmpty = data !== null && data.recent.length === 0;
+  const insight = data
+    ? spendingInsight(spent, data.prevSpent, day, period.prev, (c) => formatMoney(c, currency))
+    : '';
+  const edit = (id: number) => router.push({ pathname: '/add', params: { id: String(id) } });
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
@@ -37,54 +79,59 @@ export default function HomeScreen() {
             <Text style={[styles.hello, { color: colors.text }]}>Hola 👋</Text>
           </View>
           <View style={[styles.logo, { backgroundColor: colors.primary }]}>
-            <Text style={{ color: colors.onPrimary, fontWeight: '900', fontSize: 18 }}>₡</Text>
+            <Text style={{ color: colors.onPrimary, fontWeight: '900', fontSize: 18 }}>{CURRENCY_SYMBOL[currency]}</Text>
           </View>
         </View>
 
         {/* Hero: spent this month */}
-        <View style={[styles.hero, { backgroundColor: colors.primary }]}>
-          <Text style={[styles.heroLabel, { color: colors.onPrimary }]}>Gastado este mes</Text>
-          <Text style={[styles.heroAmount, { color: colors.onPrimary }]}>{formatMoney(spent, currency)}</Text>
-          {budget > 0 ? (
+        <View style={[styles.hero, { backgroundColor: colors.hero }]}>
+          <Text style={[styles.heroLabel, { color: colors.onHero }]}>Gastado este mes</Text>
+          <Text
+            onLayout={(e) => setHeroWidth(e.nativeEvent.layout.width)}
+            style={[styles.heroAmount, { color: colors.onHero, fontSize: fitFontSize(spentLabel, heroWidth) }]}
+            numberOfLines={1}
+          >
+            {spentLabel}
+          </Text>
+          {budget > 0 && (
             <>
               <View style={styles.heroBarTrack}>
                 <View
                   style={[
                     styles.heroBarFill,
-                    { width: `${Math.min(ratio, 1) * 100}%`, backgroundColor: ratio >= 1 ? '#FFB4B4' : colors.onPrimary },
+                    { width: `${Math.min(ratio, 1) * 100}%`, backgroundColor: ratio >= 1 ? '#FFB4B4' : colors.onHero },
                   ]}
                 />
               </View>
-              <Text style={[styles.heroSub, { color: colors.onPrimary }]}>
-                {Math.round(ratio * 100)}% de {formatMoney(budget, currency)} presupuestado
+              <Text style={[styles.heroSub, { color: colors.onHero }]}>
+                {formatPercent(ratio)} de {formatMoney(budget, currency)} presupuestado
               </Text>
             </>
-          ) : (
-            <Text style={[styles.heroSub, { color: colors.onPrimary }]}>Define presupuestos para ver tu avance</Text>
           )}
+          {insight ? <Text style={[styles.heroSub, { color: colors.onHero }]}>{insight}</Text> : null}
         </View>
 
         {/* Income / balance */}
         <View style={styles.row2}>
-          <Card style={{ flex: 1 }}>
+          <Card style={styles.statCard}>
             <View style={styles.statHead}>
               <Ionicons name="arrow-down-circle" size={18} color={colors.income} />
               <Muted>Ingresos</Muted>
             </View>
-            <Text style={[styles.stat, { color: colors.text }]}>{formatMoney(income, currency)}</Text>
+            <Text style={[styles.stat, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatMoney(income, currency)}</Text>
           </Card>
-          <Card style={{ flex: 1 }}>
+          <Card style={styles.statCard}>
             <View style={styles.statHead}>
               <Ionicons name="wallet" size={18} color={colors.primary} />
               <Muted>Balance</Muted>
             </View>
-            <Text style={[styles.stat, { color: income - spent >= 0 ? colors.text : colors.expense }]}>
+            <Text style={[styles.stat, { color: income - spent >= 0 ? colors.text : colors.expense }]} numberOfLines={1} adjustsFontSizeToFit>
               {formatMoney(income - spent, currency)}
             </Text>
           </Card>
         </View>
 
-        {/* Quick actions */}
+        {/* Quick actions: stack instead of breaking words on very narrow screens */}
         <View style={styles.row2}>
           <Pressable
             onPress={() => router.push('/scan')}
@@ -94,8 +141,8 @@ export default function HomeScreen() {
               <Ionicons name="scan" size={22} color={colors.primary} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.actionTitle, { color: colors.text }]}>Escanear</Text>
-              <Muted style={{ fontSize: 12 }}>factura o voucher</Muted>
+              <Text style={[styles.actionTitle, { color: colors.text }]} numberOfLines={1}>Escanear</Text>
+              <Muted style={{ fontSize: 12 }} numberOfLines={1}>factura o voucher</Muted>
             </View>
           </Pressable>
           <Pressable
@@ -106,8 +153,8 @@ export default function HomeScreen() {
               <Ionicons name="add" size={24} color={colors.text} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.actionTitle, { color: colors.text }]}>Agregar</Text>
-              <Muted style={{ fontSize: 12 }}>gasto o ingreso</Muted>
+              <Text style={[styles.actionTitle, { color: colors.text }]} numberOfLines={1}>Agregar</Text>
+              <Muted style={{ fontSize: 12 }} numberOfLines={1}>gasto o ingreso</Muted>
             </View>
           </Pressable>
         </View>
@@ -157,7 +204,7 @@ export default function HomeScreen() {
               <Muted style={{ textAlign: 'center' }}>Escanea tu primera factura o carga los datos demo en Ajustes.</Muted>
             </View>
           ) : (
-            data?.recent.map((tx) => <TransactionRow key={tx.id} tx={tx} showDate />)
+            data?.recent.map((tx) => <TransactionRow key={tx.id} tx={tx} showDate onPress={() => edit(tx.id)} />)
           )}
         </Card>
       </ScrollView>
@@ -171,15 +218,16 @@ const styles = StyleSheet.create({
   hello: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5 },
   logo: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   hero: { borderRadius: 28, padding: 22, gap: 6 },
-  heroLabel: { fontSize: 14, fontWeight: '600', opacity: 0.85 },
+  heroLabel: { fontSize: 14, fontWeight: '600' },
   heroAmount: { fontSize: 40, fontWeight: '900', letterSpacing: -1, fontVariant: ['tabular-nums'] },
   heroBarTrack: { height: 8, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.25)', overflow: 'hidden', marginTop: 8 },
   heroBarFill: { height: 8, borderRadius: 8 },
-  heroSub: { fontSize: 13, opacity: 0.9, marginTop: 4 },
-  row2: { flexDirection: 'row', gap: 12, marginTop: 12 },
+  heroSub: { fontSize: 13, fontWeight: '500', marginTop: 4 },
+  row2: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 12 },
+  statCard: { flexGrow: 1, flexBasis: 140 },
   statHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   stat: { fontSize: 18, fontWeight: '800', marginTop: 6, fontVariant: ['tabular-nums'] },
-  action: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 20, borderWidth: 1.5 },
+  action: { flexGrow: 1, flexBasis: 150, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 20, borderWidth: 1.5 },
   actionIcon: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   actionTitle: { fontSize: 15, fontWeight: '700' },
   donutCard: { flexDirection: 'row', alignItems: 'center', gap: 18 },

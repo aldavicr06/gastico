@@ -2,11 +2,15 @@ import { Stack } from 'expo-router';
 import { SQLiteProvider } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { DialogHost } from '../components/DialogHost';
+import { ToastHost } from '../components/ToastHost';
 import { AppProvider, useApp } from '../lib/app-context';
+import { useDocumentTitle } from '../lib/document-title';
 import { migrate } from '../lib/db';
 
 function ThemedStack() {
   const { colors } = useApp();
+  useDocumentTitle();
   return (
     <>
       <StatusBar style={colors.dark ? 'light' : 'dark'} />
@@ -20,6 +24,8 @@ function ThemedStack() {
         <Stack.Screen name="add" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="scan" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
       </Stack>
+      <ToastHost />
+      <DialogHost />
     </>
   );
 }

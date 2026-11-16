@@ -9,6 +9,9 @@ export type Palette = {
   primary: string;
   primarySoft: string;
   onPrimary: string;
+  /** Home hero card: background and text, at least 4.5:1 contrast. */
+  hero: string;
+  onHero: string;
   expense: string;
   income: string;
   warning: string;
@@ -26,6 +29,8 @@ export const light: Palette = {
   primary: '#0E9F6E',
   primarySoft: '#D7F5EA',
   onPrimary: '#FFFFFF',
+  hero: '#047857',
+  onHero: '#FFFFFF',
   expense: '#E5484D',
   income: '#0E9F6E',
   warning: '#F5A524',
@@ -43,6 +48,8 @@ export const dark: Palette = {
   primary: '#2BD59A',
   primarySoft: '#123A2C',
   onPrimary: '#04140D',
+  hero: '#2BD59A',
+  onHero: '#04140D',
   expense: '#FF6B6B',
   income: '#2BD59A',
   warning: '#FFB547',

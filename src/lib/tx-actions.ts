@@ -1,0 +1,69 @@
+import * as Haptics from 'expo-haptics';
+import { useSQLiteContext } from 'expo-sqlite';
+import { useCallback } from 'react';
+import { useApp } from './app-context';
+import { deleteTransaction, getCategoryMonth, restoreTransaction, type Transaction } from './db';
+import { formatPercent } from './format';
+
+/** Deletes right away and offers "Deshacer" in a toast (no confirm dialog). */
+export function useDeleteTransaction() {
+  const db = useSQLiteContext();
+  const { notifyDataChanged, showToast, hideToast } = useApp();
+
+  return useCallback(
+    async (tx: Transaction) => {
+      // Keep only the table's own columns; list rows also carry category_* fields.
+      const saved: Transaction = {
+        id: tx.id, type: tx.type, amount_cents: tx.amount_cents, category_id: tx.category_id,
+        note: tx.note, merchant: tx.merchant, date: tx.date, source: tx.source,
+        receipt_uri: tx.receipt_uri, created_at: tx.created_at,
+      };
+      await deleteTransaction(db, tx.id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      notifyDataChanged();
+      showToast({
+        message: 'Movimiento borrado',
+        actionLabel: 'Deshacer',
+        onAction: async () => {
+          hideToast();
+          await restoreTransaction(db, saved);
+          notifyDataChanged();
+        },
+      });
+    },
+    [db, notifyDataChanged, showToast, hideToast],
+  );
+}
+
+const THRESHOLDS = [1, 0.8];
+
+/**
+ * Snapshot a category's spending before a save, then call the returned
+ * function after it: shows a toast when the save crosses 80 % or 100 %.
+ */
+export function useBudgetAlert() {
+  const db = useSQLiteContext();
+  const { showToast } = useApp();
+
+  return useCallback(
+    async (categoryId: string, month: string) => {
+      const before = await getCategoryMonth(db, categoryId, month);
+      return async () => {
+        const after = await getCategoryMonth(db, categoryId, month);
+        if (!before || !after?.budget_cents) return;
+        const r0 = before.spent_cents / after.budget_cents;
+        const r1 = after.spent_cents / after.budget_cents;
+        const crossed = THRESHOLDS.find((t) => r0 < t && r1 >= t);
+        if (crossed === undefined) return;
+        showToast({
+          tone: 'warning',
+          message:
+            crossed >= 1
+              ? `${after.name}: te pasaste del presupuesto (${formatPercent(r1)})`
+              : `${after.name}: ya usaste el ${formatPercent(r1)} del presupuesto`,
+        });
+      };
+    },
+    [db, showToast],
+  );
+}

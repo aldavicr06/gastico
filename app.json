@@ -24,19 +24,29 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "output": "static"
     },
     "plugins": [
-      "expo-router",
+      [
+        "expo-router",
+        {
+          "headers": {
+            "Cross-Origin-Embedder-Policy": "credentialless",
+            "Cross-Origin-Opener-Policy": "same-origin"
+          }
+        }
+      ],
       "expo-sqlite",
       "expo-sharing",
       [
         "expo-image-picker",
         {
-          "cameraPermission": "Gastico usa la c\u00e1mara para leer el total de tus facturas.",
+          "cameraPermission": "Gastico usa la cámara para leer el total de tus facturas.",
           "photosPermission": "Gastico necesita tus fotos para leer facturas guardadas."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": false

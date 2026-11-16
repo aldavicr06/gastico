@@ -2,10 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CategoryPicker } from '../components/CategoryPicker';
 import { Button, Card, Chip, Muted } from '../components/ui';
@@ -14,6 +13,9 @@ import { addTransaction, getCategories } from '../lib/db';
 import { CURRENCY_SYMBOL, formatMoney, inputToCents, shortDate, toISODate } from '../lib/format';
 import { ocrAvailable, recognizeText } from '../lib/ocr';
 import { parseReceipt, type ParsedReceipt } from '../lib/receipt';
+import { notify } from '../lib/dialog';
+import { closeModal } from '../lib/navigation';
+import { useBudgetAlert } from '../lib/tx-actions';
 import { useData } from '../lib/use-data';
 
 type Step = 'pick' | 'reading' | 'review';
@@ -21,6 +23,7 @@ type Step = 'pick' | 'reading' | 'review';
 export default function ScanScreen() {
   const db = useSQLiteContext();
   const { colors, currency, notifyDataChanged } = useApp();
+  const budgetAlert = useBudgetAlert();
   const categories = useData((d) => getCategories(d, 'expense'));
 
   const [step, setStep] = useState<Step>('pick');
@@ -38,7 +41,7 @@ export default function ScanScreen() {
       ? await ImagePicker.requestCameraPermissionsAsync()
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert('Permiso necesario', from === 'camera' ? 'Gastico necesita la cámara para leer tus facturas.' : 'Gastico necesita acceso a tus fotos.');
+      notify('Permiso necesario', from === 'camera' ? 'Gastico necesita la cámara para leer tus facturas.' : 'Gastico necesita acceso a tus fotos.');
       return;
     }
     const opts: ImagePicker.ImagePickerOptions = { mediaTypes: 'images', quality: 0.9 };
@@ -86,6 +89,7 @@ export default function ScanScreen() {
 
   const save = async () => {
     if (!cents || !categoryId) return;
+    const afterSave = await budgetAlert(categoryId, date.slice(0, 7));
     await addTransaction(db, {
       type: 'expense',
       amount_cents: cents,
@@ -98,12 +102,13 @@ export default function ScanScreen() {
     });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     notifyDataChanged();
-    router.back();
+    await afterSave();
+    closeModal();
   };
 
   const header = (
     <View style={styles.header}>
-      <Pressable onPress={() => router.back()} hitSlop={12}>
+      <Pressable onPress={() => closeModal()} hitSlop={12}>
         <Ionicons name="close" size={26} color={colors.text} />
       </Pressable>
       <Text style={[styles.headerTitle, { color: colors.text }]}>Escanear factura</Text>

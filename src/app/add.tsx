@@ -1,36 +1,68 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CategoryPicker } from '../components/CategoryPicker';
 import { Button, Chip } from '../components/ui';
 import { useApp } from '../lib/app-context';
-import { addTransaction, getCategories, type TxType } from '../lib/db';
-import { CURRENCY_SYMBOL, inputToCents, toISODate } from '../lib/format';
+import { addTransaction, getCategories, getTransaction, updateTransaction, type Transaction, type TxType } from '../lib/db';
+import { addDays, centsToInput, CURRENCY_SYMBOL, dayLabel, inputToCents, toISODate } from '../lib/format';
+import { closeModal } from '../lib/navigation';
+import { useBudgetAlert, useDeleteTransaction } from '../lib/tx-actions';
 import { useData } from '../lib/use-data';
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'];
 
+/** New transaction, or edit an existing one with `/add?id=12`. */
 export default function AddScreen() {
   const db = useSQLiteContext();
   const { colors, currency, notifyDataChanged } = useApp();
+  const { height } = useWindowDimensions();
+  const params = useLocalSearchParams<{ id?: string }>();
+  const editId = params.id ? Number(params.id) : null;
+  const deleteTx = useDeleteTransaction();
+  const budgetAlert = useBudgetAlert();
+
+  const today = toISODate(new Date());
+  const [original, setOriginal] = useState<Transaction | null>(null);
   const [type, setType] = useState<TxType>('expense');
   const [amount, setAmount] = useState('');
   const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [merchant, setMerchant] = useState('');
   const [note, setNote] = useState('');
-  const [dayOffset, setDayOffset] = useState(0);
+  const [date, setDate] = useState(today);
+  const [typing, setTyping] = useState(false);
   const categories = useData((d) => getCategories(d, type), [type]);
 
-  useEffect(() => setCategoryId(null), [type]);
+  // Edit mode: load the transaction once and prefill every field.
+  useEffect(() => {
+    if (editId === null) return;
+    getTransaction(db, editId).then((tx) => {
+      if (!tx) return closeModal();
+      setOriginal(tx);
+      setType(tx.type);
+      setAmount(centsToInput(tx.amount_cents));
+      setCategoryId(tx.category_id);
+      setMerchant(tx.merchant ?? '');
+      setNote(tx.note ?? '');
+      setDate(tx.date);
+    });
+  }, [db, editId]);
+
+  const changeType = (t: TxType) => {
+    if (t === type) return;
+    setType(t);
+    setCategoryId(null); // categories differ between expenses and income
+  };
 
   const press = (k: string) => {
     Haptics.selectionAsync();
     setAmount((a) => {
       if (k === '⌫') return a.slice(0, -1);
-      if (k === '.') return currency === 'CRC' || a.includes('.') ? a : (a || '0') + '.';
+      if (k === '.') return a.includes('.') ? a : (a || '0') + '.';
       if (a.includes('.') && a.split('.')[1].length >= 2) return a;
       if (a.replace('.', '').length >= 10) return a;
       return a === '0' ? k : a + k;
@@ -40,41 +72,60 @@ export default function AddScreen() {
   const cents = inputToCents(amount);
   const display = amount
     ? String(Number(amount.split('.')[0])).replace(/\B(?=(\d{3})+(?!\d))/g, currency === 'CRC' ? ' ' : ',') +
-      (amount.includes('.') ? '.' + amount.split('.')[1] : '')
+      // Colones use a decimal comma (₡5,55), dollars a point ($5.55).
+      (amount.includes('.') ? (currency === 'CRC' ? ',' : '.') + amount.split('.')[1] : '')
     : '0';
 
   const save = async () => {
     if (!cents || !categoryId) return;
-    const d = new Date();
-    d.setDate(d.getDate() - dayOffset);
-    await addTransaction(db, {
+    const fields = {
       type,
       amount_cents: cents,
       category_id: categoryId,
       note: note.trim() || null,
-      merchant: null,
-      date: toISODate(d),
-      source: 'manual',
-      receipt_uri: null,
-    });
+      merchant: merchant.trim() || null,
+      date,
+    };
+    const afterSave = type === 'expense' ? await budgetAlert(categoryId, date.slice(0, 7)) : null;
+    if (original) {
+      await updateTransaction(db, original.id, fields);
+    } else {
+      await addTransaction(db, { ...fields, source: 'manual', receipt_uri: null });
+    }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     notifyDataChanged();
-    router.back();
+    await afterSave?.();
+    closeModal();
+  };
+
+  const remove = async () => {
+    if (!original) return;
+    await deleteTx(original);
+    closeModal();
   };
 
   const accent = type === 'expense' ? colors.expense : colors.income;
+  const compact = height < 720;
+  const keyHeight = compact ? 44 : 52;
+  const inputStyle = [styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }];
+  // On phones the system keyboard needs the room, so the number pad steps aside while
+  // typing. On web there is no on-screen keyboard; keep the pad to avoid a layout jump.
+  const hidesPad = Platform.OS !== 'web';
+  const inputFocus = hidesPad ? { onFocus: () => setTyping(true), onBlur: () => setTyping(false) } : {};
+  const saveLabel = !cents ? 'Ingresa un monto' : !categoryId ? 'Elige una categoría' : original ? 'Guardar cambios' : 'Guardar';
+  const isYesterday = date === addDays(today, -1);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
+        <Pressable onPress={() => closeModal()} hitSlop={12} accessibilityLabel="Cerrar">
           <Ionicons name="close" size={26} color={colors.text} />
         </Pressable>
         <View style={[styles.segment, { backgroundColor: colors.cardAlt }]}>
           {(['expense', 'income'] as const).map((t) => (
             <Pressable
               key={t}
-              onPress={() => setType(t)}
+              onPress={() => changeType(t)}
               style={[styles.segmentItem, type === t && { backgroundColor: colors.card }]}
             >
               <Text style={{ color: type === t ? colors.text : colors.textMuted, fontWeight: '700' }}>
@@ -83,52 +134,99 @@ export default function AddScreen() {
             </Pressable>
           ))}
         </View>
-        <Pressable onPress={() => router.replace('/scan')} hitSlop={12}>
-          <Ionicons name="scan" size={24} color={colors.primary} />
-        </Pressable>
+        {original ? (
+          <Pressable onPress={remove} hitSlop={12} accessibilityLabel="Borrar movimiento">
+            <Ionicons name="trash-outline" size={24} color={colors.danger} />
+          </Pressable>
+        ) : (
+          <Pressable onPress={() => router.replace('/scan')} hitSlop={12} accessibilityLabel="Escanear factura">
+            <Ionicons name="scan" size={24} color={colors.primary} />
+          </Pressable>
+        )}
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 12 }} keyboardShouldPersistTaps="handled">
-        <View style={styles.amountBox}>
-          <Text style={[styles.amount, { color: amount ? accent : colors.textMuted }]} numberOfLines={1} adjustsFontSizeToFit>
+      {/* Scrolls on its own above the keypad, so categories are never hidden behind it. */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 16 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={[styles.amountBox, compact && { paddingVertical: 14 }]}>
+          <Text
+            style={[styles.amount, compact && { fontSize: 44 }, { color: amount ? accent : colors.textMuted }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+          >
             {CURRENCY_SYMBOL[currency]}{display}
           </Text>
         </View>
 
         <CategoryPicker categories={categories ?? []} selected={categoryId} onSelect={setCategoryId} />
 
-        <View style={styles.row}>
-          <Chip label="Hoy" active={dayOffset === 0} onPress={() => setDayOffset(0)} icon="calendar-outline" />
-          <Chip label="Ayer" active={dayOffset === 1} onPress={() => setDayOffset(1)} />
-          <Chip label="Anteayer" active={dayOffset === 2} onPress={() => setDayOffset(2)} />
+        {/* Date: quick chips plus a day-by-day stepper for older dates. */}
+        <View style={styles.dateRow}>
+          <Chip label="Hoy" icon="calendar-outline" active={date === today} onPress={() => setDate(today)} />
+          <Chip label="Ayer" active={isYesterday} onPress={() => setDate(addDays(today, -1))} />
+          <View style={[styles.stepper, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Pressable onPress={() => setDate(addDays(date, -1))} hitSlop={8} accessibilityLabel="Día anterior">
+              <Ionicons name="chevron-back" size={18} color={colors.text} />
+            </Pressable>
+            <Text style={[styles.stepperText, { color: colors.text }]} numberOfLines={1}>
+              {dayLabel(date)}
+            </Text>
+            <Pressable
+              onPress={() => date < today && setDate(addDays(date, 1))}
+              hitSlop={8}
+              disabled={date >= today}
+              accessibilityLabel="Día siguiente"
+            >
+              <Ionicons name="chevron-forward" size={18} color={date >= today ? colors.border : colors.text} />
+            </Pressable>
+          </View>
         </View>
 
         <TextInput
+          value={merchant}
+          onChangeText={setMerchant}
+          maxLength={60}
+          placeholder={type === 'expense' ? 'Comercio (opcional)' : 'De quién (opcional)'}
+          placeholderTextColor={colors.textMuted}
+          style={inputStyle}
+          {...inputFocus}
+        />
+        <TextInput
           value={note}
           onChangeText={setNote}
+          maxLength={140}
           placeholder="Nota (opcional)"
           placeholderTextColor={colors.textMuted}
-          style={[styles.note, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
+          style={inputStyle}
+          {...inputFocus}
         />
       </ScrollView>
 
       <View style={[styles.keypad, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
-        {KEYS.map((k) => (
-          <Pressable
-            key={k}
-            onPress={() => press(k)}
-            onLongPress={() => k === '⌫' && setAmount('')}
-            style={({ pressed }) => [styles.key, pressed && { backgroundColor: colors.cardAlt }]}
-          >
-            {k === '⌫' ? (
-              <Ionicons name="backspace-outline" size={24} color={colors.text} />
-            ) : (
-              <Text style={[styles.keyText, { color: k === '.' && currency === 'CRC' ? colors.border : colors.text }]}>{k}</Text>
-            )}
-          </Pressable>
-        ))}
+        {/* Hide the number pad while typing a note so the system keyboard has room. */}
+        {!typing &&
+          KEYS.map((k) => (
+            <Pressable
+              key={k}
+              onPress={() => press(k)}
+              onLongPress={() => k === '⌫' && setAmount('')}
+              accessibilityLabel={k === '⌫' ? 'Borrar dígito' : k === '.' ? 'Punto decimal' : k}
+              style={({ pressed }) => [styles.key, { height: keyHeight }, pressed && { backgroundColor: colors.cardAlt }]}
+            >
+              {k === '⌫' ? (
+                <Ionicons name="backspace-outline" size={24} color={colors.text} />
+              ) : k === '.' ? (
+                <View style={[styles.dot, { backgroundColor: colors.text }]} />
+              ) : (
+                <Text style={[styles.keyText, { color: colors.text }]}>{k}</Text>
+              )}
+            </Pressable>
+          ))}
         <Button
-          label={!categoryId ? 'Elige una categoría' : 'Guardar'}
+          label={saveLabel}
           icon="checkmark"
           onPress={save}
           disabled={!cents || !categoryId}
@@ -145,8 +243,19 @@ const styles = StyleSheet.create({
   segmentItem: { paddingVertical: 8, paddingHorizontal: 22, borderRadius: 10 },
   amountBox: { alignItems: 'center', paddingVertical: 24 },
   amount: { fontSize: 52, fontWeight: '900', letterSpacing: -1.5, fontVariant: ['tabular-nums'] },
-  row: { flexDirection: 'row', gap: 8, marginTop: 16 },
-  note: { marginTop: 14, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, borderWidth: StyleSheet.hairlineWidth },
+  dateRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 16 },
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexShrink: 1,
+  },
+  stepperText: { fontSize: 13, fontWeight: '600', textTransform: 'capitalize', minWidth: 90, textAlign: 'center' },
+  input: { marginTop: 12, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, borderWidth: StyleSheet.hairlineWidth },
   keypad: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -157,6 +266,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
   },
-  key: { width: '33.33%', height: 54, alignItems: 'center', justifyContent: 'center', borderRadius: 14 },
+  key: { width: '33.33%', alignItems: 'center', justifyContent: 'center', borderRadius: 14 },
   keyText: { fontSize: 26, fontWeight: '600' },
+  dot: { width: 9, height: 9, borderRadius: 5 },
 });

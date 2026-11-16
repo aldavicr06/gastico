@@ -4,56 +4,84 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useSQLiteContext } from 'expo-sqlite';
 import type { ReactNode } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Card, Chip, Muted, Title, type IconName } from '../../components/ui';
 import { useApp } from '../../lib/app-context';
-import { clearTransactions, getAllTransactions, seedDemoData } from '../../lib/db';
+import { clearTransactions, countTransactions, getAllTransactions, seedDemoData } from '../../lib/db';
+import { transactionsToCsv } from '../../lib/csv';
+import { confirmAction, notify } from '../../lib/dialog';
+import { formatMoney, toISODate, type Currency } from '../../lib/format';
 import { ocrAvailable } from '../../lib/ocr';
 
 export default function AjustesScreen() {
   const db = useSQLiteContext();
-  const { colors, currency, setCurrency, themeMode, setThemeMode, notifyDataChanged } = useApp();
+  const { colors, currency, setCurrency, themeMode, setThemeMode, notifyDataChanged, showToast } = useApp();
+
+  // Amounts are stored as plain numbers, so switching currency only relabels them.
+  const changeCurrency = async (c: Currency) => {
+    if (c === currency) return;
+    if ((await countTransactions(db)) === 0) return setCurrency(c);
+    confirmAction({
+      title: `Cambiar a ${c === 'USD' ? 'dólares' : 'colones'}`,
+      message:
+        'Tus montos no se convierten: solo cambia el símbolo. ' +
+        `Por ejemplo, ${formatMoney(1805200, currency)} se mostrará como ${formatMoney(1805200, c)}.`,
+      confirmLabel: 'Cambiar',
+      onConfirm: () => setCurrency(c),
+    });
+  };
 
   const loadDemo = () =>
-    Alert.alert('Cargar datos demo', 'Reemplaza tus movimientos actuales por datos de ejemplo.', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Cargar',
-        onPress: async () => {
-          await seedDemoData(db);
-          notifyDataChanged();
-        },
+    confirmAction({
+      title: 'Cargar datos demo',
+      message: 'Reemplaza tus movimientos actuales por datos de ejemplo.',
+      confirmLabel: 'Cargar',
+      onConfirm: async () => {
+        await seedDemoData(db);
+        notifyDataChanged();
+        showToast({ message: 'Datos demo cargados' });
       },
-    ]);
+    });
 
   const clearAll = () =>
-    Alert.alert('Borrar todo', 'Se eliminarán todos los movimientos. No se puede deshacer.', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Borrar',
-        style: 'destructive',
-        onPress: async () => {
-          await clearTransactions(db);
-          notifyDataChanged();
-        },
+    confirmAction({
+      title: 'Borrar todo',
+      message: 'Se eliminarán todos los movimientos. No se puede deshacer.',
+      confirmLabel: 'Borrar',
+      destructive: true,
+      onConfirm: async () => {
+        await clearTransactions(db);
+        notifyDataChanged();
+        showToast({ message: 'Se borraron todos los movimientos' });
       },
-    ]);
+    });
 
   const exportCsv = async () => {
     const rows = await getAllTransactions(db);
-    if (rows.length === 0) return Alert.alert('Nada que exportar', 'Todavía no hay movimientos.');
-    const esc = (v: string | null) => `"${(v ?? '').replace(/"/g, '""')}"`;
-    const csv = [
-      'fecha,tipo,categoria,comercio,nota,monto,origen',
-      ...rows.map((r) =>
-        [r.date, r.type === 'expense' ? 'gasto' : 'ingreso', esc(r.category_name), esc(r.merchant), esc(r.note), (r.amount_cents / 100).toFixed(2), r.source].join(','),
-      ),
-    ].join('\n');
-    const file = new File(Paths.cache, `gastico-${Date.now()}.csv`);
-    file.write(csv);
+    if (rows.length === 0) return notify('Nada que exportar', 'Todavía no hay movimientos.');
+    const content = transactionsToCsv(rows);
+    const name = `gastico-${toISODate(new Date())}.csv`;
+    const count = `${rows.length} movimiento${rows.length === 1 ? '' : 's'}`;
+
+    if (Platform.OS === 'web') {
+      const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast({ message: `Descargado ${name} (${count})` });
+      return;
+    }
+
+    const file = new File(Paths.cache, name);
+    if (file.exists) file.delete();
+    file.write(content);
     if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(file.uri, { mimeType: 'text/csv', dialogTitle: 'Exportar movimientos' });
+      await Sharing.shareAsync(file.uri, { mimeType: 'text/csv', UTI: 'public.comma-separated-values-text', dialogTitle: 'Exportar movimientos' });
+    } else {
+      notify('No se pudo compartir', 'Este dispositivo no permite compartir archivos.');
     }
   };
 
@@ -65,9 +93,10 @@ export default function AjustesScreen() {
         <Card style={{ gap: 12 }}>
           <Label>Moneda</Label>
           <View style={styles.chips}>
-            <Chip label="₡ Colones" active={currency === 'CRC'} onPress={() => setCurrency('CRC')} />
-            <Chip label="$ Dólares" active={currency === 'USD'} onPress={() => setCurrency('USD')} />
+            <Chip label="₡ Colones" active={currency === 'CRC'} onPress={() => changeCurrency('CRC')} />
+            <Chip label="$ Dólares" active={currency === 'USD'} onPress={() => changeCurrency('USD')} />
           </View>
+          <Muted>Solo cambia el símbolo: los montos guardados no se convierten.</Muted>
           <Label>Tema</Label>
           <View style={styles.chips}>
             <Chip label="Sistema" icon="phone-portrait-outline" active={themeMode === 'system'} onPress={() => setThemeMode('system')} />

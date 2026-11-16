@@ -1,21 +1,21 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
+import { Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { TransactionRow } from '../../components/TransactionRow';
 import { Chip, Muted, Title } from '../../components/ui';
 import { useApp } from '../../lib/app-context';
-import { deleteTransaction, getTransactionsForMonth, type TransactionWithCategory } from '../../lib/db';
+import { getTransactionsForMonth, type TransactionWithCategory } from '../../lib/db';
 import { currentMonth, dayLabel, formatMoney, monthLabel, shiftMonth } from '../../lib/format';
+import { useDeleteTransaction } from '../../lib/tx-actions';
 import { useData } from '../../lib/use-data';
 
 type Filter = 'all' | 'expense' | 'income';
 
 export default function MovimientosScreen() {
-  const db = useSQLiteContext();
-  const { colors, currency, notifyDataChanged } = useApp();
+  const { colors, currency } = useApp();
+  const deleteTx = useDeleteTransaction();
   const [month, setMonth] = useState(currentMonth());
   const [filter, setFilter] = useState<Filter>('all');
   const txs = useData((d) => getTransactionsForMonth(d, month), [month]);
@@ -31,18 +31,7 @@ export default function MovimientosScreen() {
     }));
   }, [txs, filter]);
 
-  const confirmDelete = (tx: TransactionWithCategory) =>
-    Alert.alert('¿Borrar movimiento?', `${tx.merchant || tx.category_name} · ${formatMoney(tx.amount_cents, currency)}`, [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Borrar',
-        style: 'destructive',
-        onPress: async () => {
-          await deleteTransaction(db, tx.id);
-          notifyDataChanged();
-        },
-      },
-    ]);
+  const edit = (tx: TransactionWithCategory) => router.push({ pathname: '/add', params: { id: String(tx.id) } });
 
   const isCurrent = month === currentMonth();
 
@@ -87,7 +76,7 @@ export default function MovimientosScreen() {
         )}
         renderItem={({ item }) => (
           <View style={{ backgroundColor: colors.card, paddingHorizontal: 12, borderRadius: 16, marginBottom: 6 }}>
-            <TransactionRow tx={item} onLongPress={() => confirmDelete(item)} />
+            <TransactionRow tx={item} onPress={() => edit(item)} onLongPress={() => deleteTx(item)} />
           </View>
         )}
         ListEmptyComponent={
@@ -98,11 +87,13 @@ export default function MovimientosScreen() {
             </View>
           ) : undefined
         }
-        ListFooterComponent={sections.length ? <Muted style={{ textAlign: 'center', marginTop: 12 }}>Mantén presionado para borrar</Muted> : undefined}
+        ListFooterComponent={sections.length ? <Muted style={{ textAlign: 'center', marginTop: 12 }}>Toca un movimiento para editarlo o borrarlo</Muted> : undefined}
       />
 
       <Pressable
         onPress={() => router.push('/add')}
+        accessibilityRole="button"
+        accessibilityLabel="Agregar movimiento"
         style={({ pressed }) => [styles.fab, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
       >
         <Ionicons name="add" size={30} color={colors.onPrimary} />

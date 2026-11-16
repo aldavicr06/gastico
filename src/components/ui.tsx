@@ -30,9 +30,9 @@ export function SectionTitle({ children, right }: { children: ReactNode; right?:
   );
 }
 
-export function Muted({ children, style }: { children: ReactNode; style?: StyleProp<TextStyle> }) {
+export function Muted({ children, style, numberOfLines }: { children: ReactNode; style?: StyleProp<TextStyle>; numberOfLines?: number }) {
   const { colors } = useApp();
-  return <Text style={[{ color: colors.textMuted, fontSize: 13 }, style]}>{children}</Text>;
+  return <Text numberOfLines={numberOfLines} style={[{ color: colors.textMuted, fontSize: 13 }, style]}>{children}</Text>;
 }
 
 export function CategoryIcon({ icon, color, size = 40 }: { icon: string; color: string; size?: number }) {
@@ -76,6 +76,9 @@ export function Button({ label, onPress, icon, variant = 'primary', disabled, st
     <Pressable
       onPress={onPress}
       disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !!disabled }}
       style={({ pressed }) => [
         styles.button,
         { backgroundColor: bg, opacity: disabled ? 0.45 : pressed ? 0.85 : 1 },

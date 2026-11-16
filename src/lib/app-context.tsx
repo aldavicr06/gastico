@@ -7,6 +7,14 @@ import { dark, light, type Palette } from './theme';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 
+export type Toast = {
+  id: number;
+  message: string;
+  tone?: 'default' | 'warning';
+  actionLabel?: string;
+  onAction?: () => void;
+};
+
 type AppState = {
   colors: Palette;
   currency: Currency;
@@ -16,6 +24,10 @@ type AppState = {
   /** Increments whenever data changes, so screens know to reload. */
   dataVersion: number;
   notifyDataChanged: () => void;
+  /** Snackbar shown at the bottom of the app (e.g. "Movimiento borrado · Deshacer"). */
+  toast: Toast | null;
+  showToast: (t: Omit<Toast, 'id'>) => void;
+  hideToast: () => void;
 };
 
 const Ctx = createContext<AppState | null>(null);
@@ -26,6 +38,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [currency, setCurrencyState] = useState<Currency>('CRC');
   const [themeMode, setThemeState] = useState<ThemeMode>('system');
   const [dataVersion, setDataVersion] = useState(0);
+  const [toast, setToast] = useState<Toast | null>(null);
 
   useEffect(() => {
     getSettings(db).then((s) => {
@@ -45,6 +58,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [db]);
 
   const notifyDataChanged = useCallback(() => setDataVersion((v) => v + 1), []);
+  const showToast = useCallback((t: Omit<Toast, 'id'>) => setToast({ ...t, id: Date.now() }), []);
+  const hideToast = useCallback(() => setToast(null), []);
+
+  // Each toast disappears on its own after a few seconds.
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast((cur) => (cur?.id === toast.id ? null : cur)), 6000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   const isDark = themeMode === 'dark' || (themeMode === 'system' && system === 'dark');
 
@@ -56,7 +78,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setThemeMode,
     dataVersion,
     notifyDataChanged,
-  }), [isDark, currency, themeMode, setCurrency, setThemeMode, dataVersion, notifyDataChanged]);
+    toast,
+    showToast,
+    hideToast,
+  }), [isDark, currency, themeMode, setCurrency, setThemeMode, dataVersion, notifyDataChanged, toast, showToast, hideToast]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

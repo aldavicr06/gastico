@@ -19,7 +19,9 @@ export function formatMoney(cents: number, currency: Currency = 'CRC', opts: { s
   const abs = Math.abs(cents) / 100;
   let body: string;
   if (currency === 'CRC') {
-    body = groupThousands(Math.round(abs).toString(), ' ');
+    // Costa Rica: space for thousands, comma for decimals, decimals only when there are céntimos.
+    const [i, d] = abs.toFixed(2).split('.');
+    body = groupThousands(i, ' ') + (d === '00' ? '' : `,${d}`);
   } else {
     const [i, d] = abs.toFixed(2).split('.');
     body = `${groupThousands(i, ',')}.${d}`;
@@ -75,6 +77,50 @@ export function dayLabel(iso: string, today = new Date()) {
 export function shortDate(iso: string) {
   const [, mm, dd] = iso.split('-').map(Number);
   return `${dd} ${MONTHS[mm - 1].slice(0, 3)}`;
+}
+
+/** "83 %", capped so absurd ratios never break a layout: "999+ %". */
+export function formatPercent(ratio: number) {
+  const n = Math.round(ratio * 100);
+  return n > 999 ? '999+ %' : `${n} %`;
+}
+
+/**
+ * Keeps only what a money field may hold while typing: digits and one decimal
+ * separator (comma or point) with at most 2 decimals and 10 integer digits.
+ * "abc-5e3" → "53", "12,5" → "12.5".
+ */
+export function sanitizeAmountInput(text: string) {
+  const cleaned = text.replace(/,/g, '.').replace(/[^\d.]/g, '');
+  const [int, ...rest] = cleaned.split('.');
+  const intPart = int.slice(0, 10);
+  if (rest.length === 0) return intPart;
+  return `${intPart || '0'}.${rest.join('').slice(0, 2)}`;
+}
+
+/** Shift an ISO date by whole days. */
+export function addDays(iso: string, delta: number) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return toISODate(new Date(y, m - 1, d + delta));
+}
+
+export function daysInMonth(month: string) {
+  const [y, m] = month.split('-').map(Number);
+  return new Date(y, m, 0).getDate();
+}
+
+/** Local "HH:MM" from SQLite's UTC `datetime('now')` text, or null if unparseable. */
+export function localTime(sqliteUtc: string): { date: string; time: string } | null {
+  const d = new Date(sqliteUtc.replace(' ', 'T') + 'Z');
+  if (Number.isNaN(d.getTime())) return null;
+  const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return { date: toISODate(d), time };
+}
+
+/** Cents back to keypad text: "12500" or "12500.5". */
+export function centsToInput(cents: number) {
+  if (cents % 100 === 0) return String(cents / 100);
+  return (cents / 100).toFixed(2).replace(/0$/, '');
 }
 
 /** Parse what the user typed ("12.500", "12,500.50") to cents. */
