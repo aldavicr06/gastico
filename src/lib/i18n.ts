@@ -93,11 +93,6 @@ const es = {
       'Gastico funciona sin internet y sin cuentas. Las facturas se leen en el dispositivo con OCR' +
       (ocrOn ? ' (activo).' : ' (disponible en la app instalada; en Expo Go se ingresa el total a mano).'),
     version: (v: string) => `Versión ${v}`,
-    switchCurrencyTitle: (usd: boolean): string => (usd ? 'Cambiar a dólares' : 'Cambiar a colones'),
-    switchCurrencyMsg: (from: string, to: string) =>
-      `Tus montos no se convierten: solo cambia el símbolo. Por ejemplo, ${from} se mostrará como ${to}.`,
-    switch: 'Cambiar',
-    currencyChanged: (usd: boolean): string => (usd ? 'Montos en dólares ($)' : 'Montos en colones (₡)'),
     switchCurrencyA11y: (usd: boolean): string => (usd ? 'Cambiar a dólares' : 'Cambiar a colones'),
     loadDemoMsg: 'Reemplaza tus movimientos actuales por datos de ejemplo.',
     load: 'Cargar',
@@ -257,11 +252,6 @@ const en: Strings = {
       'Gastico works offline and without an account. Receipts are read on the device with OCR' +
       (ocrOn ? ' (active).' : ' (available in the installed app; in Expo Go you type the total).'),
     version: (v) => `Version ${v}`,
-    switchCurrencyTitle: (usd) => (usd ? 'Switch to US dollars' : 'Switch to colones'),
-    switchCurrencyMsg: (from, to) =>
-      `Your amounts are not converted, only the symbol changes. For example, ${from} will show as ${to}.`,
-    switch: 'Switch',
-    currencyChanged: (usd) => (usd ? 'Amounts in US dollars ($)' : 'Amounts in colones (₡)'),
     switchCurrencyA11y: (usd) => (usd ? 'Switch to US dollars' : 'Switch to colones'),
     loadDemoMsg: 'Replaces your current transactions with sample data.',
     load: 'Load',
