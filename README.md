@@ -4,10 +4,9 @@
 
 > Portfolio project: mobile app development · React Native · TypeScript · SQLite · on-device ML
 
-<!-- Replace with your screenshots / GIF -->
 | Home | Scan a receipt | Transactions | Budgets |
 |---|---|---|---|
-| `docs/home.png` | `docs/scan.png` | `docs/transactions.png` | `docs/budgets.png` |
+| <img src="docs/home.png" width="200" alt="Home"> | <img src="docs/scan.png" width="200" alt="Scan a receipt"> | <img src="docs/transactions.png" width="200" alt="Transactions"> | <img src="docs/budgets.png" width="200" alt="Budgets"> |
 
 ## Features
 
