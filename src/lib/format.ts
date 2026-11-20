@@ -1,9 +1,17 @@
+import type { Lang } from './i18n';
+
 export type Currency = 'CRC' | 'USD';
 
 export const CURRENCY_SYMBOL: Record<Currency, string> = { CRC: '₡', USD: '$' };
 
-const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-const WEEKDAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const MONTHS: Record<Lang, string[]> = {
+  es: ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'],
+  en: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+};
+const WEEKDAYS: Record<Lang, string[]> = {
+  es: ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'],
+  en: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+};
 
 /** Group digits with a thin space-like separator, Costa Rica style (₡12 345). */
 function groupThousands(intPart: string, sep: string) {
@@ -55,34 +63,37 @@ export function shiftMonth(month: string, delta: number) {
   return currentMonth(new Date(y, m - 1 + delta, 1));
 }
 
-export function monthLabel(month: string, withYear = true) {
+export function monthLabel(month: string, withYear = true, lang: Lang = 'es') {
   const [y, m] = month.split('-').map(Number);
-  const name = MONTHS[m - 1];
+  const name = MONTHS[lang][m - 1];
   const cap = name.charAt(0).toUpperCase() + name.slice(1);
   return withYear ? `${cap} ${y}` : cap;
 }
 
-/** "Hoy", "Ayer" or "martes 11 nov". */
-export function dayLabel(iso: string, today = new Date()) {
+/** "Hoy" / "Today", "Ayer" / "Yesterday", or "martes 11 nov" / "Tuesday, Nov 11". */
+export function dayLabel(iso: string, lang: Lang = 'es', today = new Date()) {
   const t = toISODate(today);
   const y = new Date(today);
   y.setDate(y.getDate() - 1);
-  if (iso === t) return 'Hoy';
-  if (iso === toISODate(y)) return 'Ayer';
+  if (iso === t) return lang === 'en' ? 'Today' : 'Hoy';
+  if (iso === toISODate(y)) return lang === 'en' ? 'Yesterday' : 'Ayer';
   const [yy, mm, dd] = iso.split('-').map(Number);
-  const d = new Date(yy, mm - 1, dd);
-  return `${WEEKDAYS[d.getDay()]} ${dd} ${MONTHS[mm - 1].slice(0, 3)}`;
+  const weekday = WEEKDAYS[lang][new Date(yy, mm - 1, dd).getDay()];
+  return lang === 'en' ? `${weekday}, ${shortDate(iso, lang)}` : `${weekday} ${shortDate(iso, lang)}`;
 }
 
-export function shortDate(iso: string) {
+/** "11 nov" / "Nov 11". */
+export function shortDate(iso: string, lang: Lang = 'es') {
   const [, mm, dd] = iso.split('-').map(Number);
-  return `${dd} ${MONTHS[mm - 1].slice(0, 3)}`;
+  const month = MONTHS[lang][mm - 1].slice(0, 3);
+  return lang === 'en' ? `${month} ${dd}` : `${dd} ${month}`;
 }
 
-/** "83 %", capped so absurd ratios never break a layout: "999+ %". */
-export function formatPercent(ratio: number) {
+/** "83 %" (es) or "83%" (en), capped so absurd ratios never break a layout: "999+ %". */
+export function formatPercent(ratio: number, lang: Lang = 'es') {
   const n = Math.round(ratio * 100);
-  return n > 999 ? '999+ %' : `${n} %`;
+  const sep = lang === 'en' ? '' : ' ';
+  return n > 999 ? `999+${sep}%` : `${n}${sep}%`;
 }
 
 /**

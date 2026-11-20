@@ -14,7 +14,7 @@ import { useData } from '../../lib/use-data';
 type Filter = 'all' | 'expense' | 'income';
 
 export default function MovimientosScreen() {
-  const { colors, currency } = useApp();
+  const { colors, currency, t, lang } = useApp();
   const deleteTx = useDeleteTransaction();
   const [month, setMonth] = useState(currentMonth());
   const [filter, setFilter] = useState<Filter>('all');
@@ -38,24 +38,33 @@ export default function MovimientosScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <View style={styles.top}>
-        <Title>Movimientos</Title>
+        <Title>{t.transactions.title}</Title>
         <View style={styles.monthRow}>
-          <Pressable onPress={() => setMonth(shiftMonth(month, -1))} hitSlop={12} style={[styles.arrow, { backgroundColor: colors.card }]}>
+          <Pressable
+            onPress={() => setMonth(shiftMonth(month, -1))}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel={t.transactions.prevMonth}
+            style={[styles.arrow, { backgroundColor: colors.card }]}
+          >
             <Ionicons name="chevron-back" size={18} color={colors.text} />
           </Pressable>
-          <Text style={[styles.month, { color: colors.text }]}>{monthLabel(month)}</Text>
+          <Text style={[styles.month, { color: colors.text }]}>{monthLabel(month, true, lang)}</Text>
           <Pressable
             onPress={() => !isCurrent && setMonth(shiftMonth(month, 1))}
             hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel={t.transactions.nextMonth}
+            accessibilityState={{ disabled: isCurrent }}
             style={[styles.arrow, { backgroundColor: colors.card, opacity: isCurrent ? 0.3 : 1 }]}
           >
             <Ionicons name="chevron-forward" size={18} color={colors.text} />
           </Pressable>
         </View>
         <View style={styles.chips}>
-          <Chip label="Todos" active={filter === 'all'} onPress={() => setFilter('all')} />
-          <Chip label="Gastos" active={filter === 'expense'} onPress={() => setFilter('expense')} />
-          <Chip label="Ingresos" active={filter === 'income'} onPress={() => setFilter('income')} />
+          <Chip label={t.transactions.all} active={filter === 'all'} onPress={() => setFilter('all')} />
+          <Chip label={t.transactions.expenses} active={filter === 'expense'} onPress={() => setFilter('expense')} />
+          <Chip label={t.transactions.income} active={filter === 'income'} onPress={() => setFilter('income')} />
         </View>
       </View>
 
@@ -67,7 +76,7 @@ export default function MovimientosScreen() {
         renderSectionHeader={({ section }) => (
           <View style={styles.dayHeader}>
             <Text style={{ color: colors.textMuted, fontWeight: '700', fontSize: 13, textTransform: 'capitalize' }}>
-              {dayLabel(section.date)}
+              {dayLabel(section.date, lang)}
             </Text>
             <Text style={{ color: colors.textMuted, fontSize: 13, fontVariant: ['tabular-nums'] }}>
               {formatMoney(section.total, currency, { sign: true })}
@@ -83,17 +92,17 @@ export default function MovimientosScreen() {
           txs ? (
             <View style={{ alignItems: 'center', marginTop: 60, gap: 8 }}>
               <Ionicons name="file-tray-outline" size={40} color={colors.textMuted} />
-              <Muted>No hay movimientos en {monthLabel(month, false).toLowerCase()}</Muted>
+              <Muted>{t.transactions.empty(monthLabel(month, false, lang))}</Muted>
             </View>
           ) : undefined
         }
-        ListFooterComponent={sections.length ? <Muted style={{ textAlign: 'center', marginTop: 12 }}>Toca un movimiento para editarlo o borrarlo</Muted> : undefined}
+        ListFooterComponent={sections.length ? <Muted style={{ textAlign: 'center', marginTop: 12 }}>{t.transactions.hint}</Muted> : undefined}
       />
 
       <Pressable
         onPress={() => router.push('/add')}
         accessibilityRole="button"
-        accessibilityLabel="Agregar movimiento"
+        accessibilityLabel={t.transactions.add}
         style={({ pressed }) => [styles.fab, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
       >
         <Ionicons name="add" size={30} color={colors.onPrimary} />

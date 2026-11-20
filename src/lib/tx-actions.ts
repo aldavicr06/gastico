@@ -4,11 +4,12 @@ import { useCallback } from 'react';
 import { useApp } from './app-context';
 import { deleteTransaction, getCategoryMonth, restoreTransaction, type Transaction } from './db';
 import { formatPercent } from './format';
+import { categoryName } from './i18n';
 
 /** Deletes right away and offers "Deshacer" in a toast (no confirm dialog). */
 export function useDeleteTransaction() {
   const db = useSQLiteContext();
-  const { notifyDataChanged, showToast, hideToast } = useApp();
+  const { notifyDataChanged, showToast, hideToast, t } = useApp();
 
   return useCallback(
     async (tx: Transaction) => {
@@ -22,8 +23,8 @@ export function useDeleteTransaction() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       notifyDataChanged();
       showToast({
-        message: 'Movimiento borrado',
-        actionLabel: 'Deshacer',
+        message: t.toast.deleted,
+        actionLabel: t.toast.undo,
         onAction: async () => {
           hideToast();
           await restoreTransaction(db, saved);
@@ -31,7 +32,7 @@ export function useDeleteTransaction() {
         },
       });
     },
-    [db, notifyDataChanged, showToast, hideToast],
+    [db, notifyDataChanged, showToast, hideToast, t],
   );
 }
 
@@ -43,7 +44,7 @@ const THRESHOLDS = [1, 0.8];
  */
 export function useBudgetAlert() {
   const db = useSQLiteContext();
-  const { showToast } = useApp();
+  const { showToast, t, lang } = useApp();
 
   return useCallback(
     async (categoryId: string, month: string) => {
@@ -55,15 +56,14 @@ export function useBudgetAlert() {
         const r1 = after.spent_cents / after.budget_cents;
         const crossed = THRESHOLDS.find((t) => r0 < t && r1 >= t);
         if (crossed === undefined) return;
+        const name = categoryName(t, categoryId, after.name);
+        const pct = formatPercent(r1, lang);
         showToast({
           tone: 'warning',
-          message:
-            crossed >= 1
-              ? `${after.name}: te pasaste del presupuesto (${formatPercent(r1)})`
-              : `${after.name}: ya usaste el ${formatPercent(r1)} del presupuesto`,
+          message: crossed >= 1 ? t.toast.overBudget(name, pct) : t.toast.nearBudget(name, pct),
         });
       };
     },
-    [db, showToast],
+    [db, showToast, t, lang],
   );
 }

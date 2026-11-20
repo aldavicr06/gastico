@@ -5,10 +5,11 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Donut } from '../../components/Donut';
 import { TransactionRow } from '../../components/TransactionRow';
-import { budgetColor, Card, Muted, ProgressBar, SectionTitle } from '../../components/ui';
+import { budgetColor, Card, LanguageToggle, Muted, ProgressBar, SectionTitle } from '../../components/ui';
 import { useApp } from '../../lib/app-context';
 import { getExpenseTotal, getMonthSummary, getTransactionsForMonth } from '../../lib/db';
 import { CURRENCY_SYMBOL, currentMonth, daysInMonth, formatCompact, formatMoney, formatPercent, monthLabel, shiftMonth } from '../../lib/format';
+import { categoryName, type Lang, type Strings } from '../../lib/i18n';
 import { useData } from '../../lib/use-data';
 
 /** Same stretch of last month: 1st up to today's day (clamped to its length). */
@@ -18,17 +19,20 @@ function previousPeriod(month: string, day: number) {
   return { prev, from: `${prev}-01`, to: `${prev}-${end}` };
 }
 
-/** "Promedio diario ₡X · 12 % menos que octubre a esta fecha". */
-function spendingInsight(spent: number, prevSpent: number, day: number, prevMonth: string, fmt: (c: number) => string) {
-  if (spent === 0) return 'Aún no registras gastos este mes';
+/** "Promedio diario ₡X · 12 % menos que octubre a esta fecha" / "Daily average $X · 12% less than October to date". */
+function spendingInsight(
+  spent: number, prevSpent: number, day: number, prevMonth: string,
+  fmt: (c: number) => string, t: Strings, lang: Lang,
+) {
+  if (spent === 0) return t.home.noSpendingYet;
   // Whole colones/dollars: an average with céntimos reads as noise.
-  const parts = [`Promedio diario ${fmt(Math.round(spent / day / 100) * 100)}`];
+  const parts = [t.home.dailyAverage(fmt(Math.round(spent / day / 100) * 100))];
   if (prevSpent > 0) {
     const diff = Math.round(((spent - prevSpent) / prevSpent) * 100);
-    const prevName = monthLabel(prevMonth, false).toLowerCase();
+    const prevName = monthLabel(prevMonth, false, lang);
     parts.push(
-      diff === 0 ? `igual que ${prevName} a esta fecha`
-      : `${formatPercent(Math.abs(diff) / 100)} ${diff > 0 ? 'más' : 'menos'} que ${prevName} a esta fecha`,
+      diff === 0 ? t.home.sameAsLastMonth(prevName)
+      : t.home.vsLastMonth(formatPercent(Math.abs(diff) / 100, lang), diff > 0, prevName),
     );
   }
   return parts.join(' · ');
@@ -44,7 +48,7 @@ function fitFontSize(label: string, width: number) {
 }
 
 export default function HomeScreen() {
-  const { colors, currency } = useApp();
+  const { colors, currency, t, lang } = useApp();
   const month = currentMonth();
   const day = new Date().getDate();
   const period = previousPeriod(month, day);
@@ -65,7 +69,7 @@ export default function HomeScreen() {
   const [heroWidth, setHeroWidth] = useState(0);
   const isEmpty = data !== null && data.recent.length === 0;
   const insight = data
-    ? spendingInsight(spent, data.prevSpent, day, period.prev, (c) => formatMoney(c, currency))
+    ? spendingInsight(spent, data.prevSpent, day, period.prev, (c) => formatMoney(c, currency), t, lang)
     : '';
   const edit = (id: number) => router.push({ pathname: '/add', params: { id: String(id) } });
 
@@ -74,18 +78,21 @@ export default function HomeScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <View>
-            <Muted>{monthLabel(month)}</Muted>
-            <Text style={[styles.hello, { color: colors.text }]}>Hola 👋</Text>
+          <View style={{ flexShrink: 1 }}>
+            <Muted>{monthLabel(month, true, lang)}</Muted>
+            <Text style={[styles.hello, { color: colors.text }]}>{t.home.hello}</Text>
           </View>
-          <View style={[styles.logo, { backgroundColor: colors.primary }]}>
-            <Text style={{ color: colors.onPrimary, fontWeight: '900', fontSize: 18 }}>{CURRENCY_SYMBOL[currency]}</Text>
+          <View style={styles.headerRight}>
+            <LanguageToggle />
+            <View style={[styles.logo, { backgroundColor: colors.primary }]}>
+              <Text style={{ color: colors.onPrimary, fontWeight: '900', fontSize: 18 }}>{CURRENCY_SYMBOL[currency]}</Text>
+            </View>
           </View>
         </View>
 
         {/* Hero: spent this month */}
         <View style={[styles.hero, { backgroundColor: colors.hero }]}>
-          <Text style={[styles.heroLabel, { color: colors.onHero }]}>Gastado este mes</Text>
+          <Text style={[styles.heroLabel, { color: colors.onHero }]}>{t.home.spentThisMonth}</Text>
           <Text
             onLayout={(e) => setHeroWidth(e.nativeEvent.layout.width)}
             style={[styles.heroAmount, { color: colors.onHero, fontSize: fitFontSize(spentLabel, heroWidth) }]}
@@ -104,7 +111,7 @@ export default function HomeScreen() {
                 />
               </View>
               <Text style={[styles.heroSub, { color: colors.onHero }]}>
-                {formatPercent(ratio)} de {formatMoney(budget, currency)} presupuestado
+                {t.home.budgetOf(formatPercent(ratio, lang), formatMoney(budget, currency))}
               </Text>
             </>
           )}
@@ -116,14 +123,14 @@ export default function HomeScreen() {
           <Card style={styles.statCard}>
             <View style={styles.statHead}>
               <Ionicons name="arrow-down-circle" size={18} color={colors.income} />
-              <Muted>Ingresos</Muted>
+              <Muted>{t.home.income}</Muted>
             </View>
             <Text style={[styles.stat, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatMoney(income, currency)}</Text>
           </Card>
           <Card style={styles.statCard}>
             <View style={styles.statHead}>
               <Ionicons name="wallet" size={18} color={colors.primary} />
-              <Muted>Balance</Muted>
+              <Muted>{t.home.balance}</Muted>
             </View>
             <Text style={[styles.stat, { color: income - spent >= 0 ? colors.text : colors.expense }]} numberOfLines={1} adjustsFontSizeToFit>
               {formatMoney(income - spent, currency)}
@@ -141,8 +148,8 @@ export default function HomeScreen() {
               <Ionicons name="scan" size={22} color={colors.primary} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.actionTitle, { color: colors.text }]} numberOfLines={1}>Escanear</Text>
-              <Muted style={{ fontSize: 12 }} numberOfLines={1}>factura o voucher</Muted>
+              <Text style={[styles.actionTitle, { color: colors.text }]} numberOfLines={1}>{t.home.scan}</Text>
+              <Muted style={{ fontSize: 12 }} numberOfLines={2}>{t.home.scanSub}</Muted>
             </View>
           </Pressable>
           <Pressable
@@ -153,8 +160,8 @@ export default function HomeScreen() {
               <Ionicons name="add" size={24} color={colors.text} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.actionTitle, { color: colors.text }]} numberOfLines={1}>Agregar</Text>
-              <Muted style={{ fontSize: 12 }} numberOfLines={1}>gasto o ingreso</Muted>
+              <Text style={[styles.actionTitle, { color: colors.text }]} numberOfLines={1}>{t.home.add}</Text>
+              <Muted style={{ fontSize: 12 }} numberOfLines={2}>{t.home.addSub}</Muted>
             </View>
           </Pressable>
         </View>
@@ -162,18 +169,19 @@ export default function HomeScreen() {
         {/* Donut by category */}
         {slices.length > 0 && (
           <>
-            <SectionTitle>¿En qué se fue la plata?</SectionTitle>
+            <SectionTitle>{t.home.whereMoneyWent}</SectionTitle>
             <Card style={styles.donutCard}>
               <Donut data={slices.map((c) => ({ value: c.spent_cents, color: c.color }))} size={150} stroke={18} track={colors.cardAlt}>
-                <Muted style={{ fontSize: 11 }}>Total</Muted>
+                <Muted style={{ fontSize: 11 }}>{t.common.total}</Muted>
                 <Text style={{ color: colors.text, fontWeight: '800', fontSize: 18 }}>{formatCompact(spent, currency)}</Text>
               </Donut>
-              <View style={{ flex: 1, gap: 10 }}>
+              {/* Legend keeps a readable width; on very narrow phones it moves below the chart. */}
+              <View style={{ flexGrow: 1, flexBasis: 130, gap: 10 }}>
                 {top.map((c) => (
                   <View key={c.id} style={{ gap: 4 }}>
                     <View style={styles.legendRow}>
                       <View style={[styles.dot, { backgroundColor: c.color }]} />
-                      <Text style={{ color: colors.text, fontSize: 13, flex: 1 }} numberOfLines={1}>{c.name}</Text>
+                      <Text style={{ color: colors.text, fontSize: 13, flex: 1 }} numberOfLines={1}>{categoryName(t, c.id, c.name)}</Text>
                       <Text style={{ color: colors.textMuted, fontSize: 12 }}>{Math.round((c.spent_cents / spent) * 100)}%</Text>
                     </View>
                     {c.budget_cents ? (
@@ -190,18 +198,18 @@ export default function HomeScreen() {
         <SectionTitle
           right={
             <Pressable onPress={() => router.push('/movimientos')}>
-              <Text style={{ color: colors.primary, fontWeight: '600' }}>Ver todo</Text>
+              <Text style={{ color: colors.primary, fontWeight: '600' }}>{t.home.seeAll}</Text>
             </Pressable>
           }
         >
-          Últimos movimientos
+          {t.home.recent}
         </SectionTitle>
         <Card style={{ paddingVertical: 6 }}>
           {isEmpty ? (
             <View style={styles.empty}>
               <Ionicons name="receipt-outline" size={36} color={colors.textMuted} />
-              <Text style={{ color: colors.text, fontWeight: '600' }}>Todavía no hay movimientos</Text>
-              <Muted style={{ textAlign: 'center' }}>Escanea tu primera factura o carga los datos demo en Ajustes.</Muted>
+              <Text style={{ color: colors.text, fontWeight: '600' }}>{t.home.emptyTitle}</Text>
+              <Muted style={{ textAlign: 'center' }}>{t.home.emptyBody}</Muted>
             </View>
           ) : (
             data?.recent.map((tx) => <TransactionRow key={tx.id} tx={tx} showDate onPress={() => edit(tx.id)} />)
@@ -214,7 +222,8 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   content: { padding: 20, paddingBottom: 40 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   hello: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5 },
   logo: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   hero: { borderRadius: 28, padding: 22, gap: 6 },
@@ -230,7 +239,7 @@ const styles = StyleSheet.create({
   action: { flexGrow: 1, flexBasis: 150, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 20, borderWidth: 1.5 },
   actionIcon: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   actionTitle: { fontSize: 15, fontWeight: '700' },
-  donutCard: { flexDirection: 'row', alignItems: 'center', gap: 18 },
+  donutCard: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 18 },
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   dot: { width: 10, height: 10, borderRadius: 5 },
   empty: { alignItems: 'center', gap: 8, paddingVertical: 24, paddingHorizontal: 12 },

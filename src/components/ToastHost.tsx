@@ -13,7 +13,7 @@ const FAB_SIZE = 60;
 
 /** Bottom snackbar for the app-wide toast (undo, budget alerts). */
 export function ToastHost() {
-  const { toast, hideToast, colors } = useApp();
+  const { toast, hideToast, colors, t } = useApp();
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const onModal = MODAL_ROUTES.includes(pathname);
@@ -45,7 +45,7 @@ export function ToastHost() {
             <Text style={[styles.action, { color: colors.dark ? colors.primary : '#5EEAB4' }]}>{toast.actionLabel}</Text>
           </Pressable>
         ) : (
-          <Pressable onPress={hideToast} hitSlop={10} accessibilityLabel="Cerrar aviso">
+          <Pressable onPress={hideToast} hitSlop={10} accessibilityLabel={t.toast.dismiss}>
             <Ionicons name="close" size={18} color="#C9D3CE" />
           </Pressable>
         )}

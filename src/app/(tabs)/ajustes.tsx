@@ -16,53 +16,52 @@ import { ocrAvailable } from '../../lib/ocr';
 
 export default function AjustesScreen() {
   const db = useSQLiteContext();
-  const { colors, currency, setCurrency, themeMode, setThemeMode, notifyDataChanged, showToast } = useApp();
+  const { colors, currency, setCurrency, themeMode, setThemeMode, notifyDataChanged, showToast, t, lang, setLang } = useApp();
 
   // Amounts are stored as plain numbers, so switching currency only relabels them.
   const changeCurrency = async (c: Currency) => {
     if (c === currency) return;
     if ((await countTransactions(db)) === 0) return setCurrency(c);
     confirmAction({
-      title: `Cambiar a ${c === 'USD' ? 'dólares' : 'colones'}`,
-      message:
-        'Tus montos no se convierten: solo cambia el símbolo. ' +
-        `Por ejemplo, ${formatMoney(1805200, currency)} se mostrará como ${formatMoney(1805200, c)}.`,
-      confirmLabel: 'Cambiar',
+      title: t.settings.switchCurrencyTitle(c === 'USD'),
+      message: t.settings.switchCurrencyMsg(formatMoney(1805200, currency), formatMoney(1805200, c)),
+      confirmLabel: t.settings.switch,
       onConfirm: () => setCurrency(c),
     });
   };
 
   const loadDemo = () =>
     confirmAction({
-      title: 'Cargar datos demo',
-      message: 'Reemplaza tus movimientos actuales por datos de ejemplo.',
-      confirmLabel: 'Cargar',
+      title: t.settings.loadDemo,
+      message: t.settings.loadDemoMsg,
+      confirmLabel: t.settings.load,
       onConfirm: async () => {
-        await seedDemoData(db);
+        // The demo comes in the currency of the language: colones or dollars.
+        setCurrency(await seedDemoData(db, lang));
         notifyDataChanged();
-        showToast({ message: 'Datos demo cargados' });
+        showToast({ message: t.settings.demoLoaded });
       },
     });
 
   const clearAll = () =>
     confirmAction({
-      title: 'Borrar todo',
-      message: 'Se eliminarán todos los movimientos. No se puede deshacer.',
-      confirmLabel: 'Borrar',
+      title: t.settings.clearTitle,
+      message: t.settings.clearMsg,
+      confirmLabel: t.settings.delete,
       destructive: true,
       onConfirm: async () => {
         await clearTransactions(db);
         notifyDataChanged();
-        showToast({ message: 'Se borraron todos los movimientos' });
+        showToast({ message: t.settings.cleared });
       },
     });
 
   const exportCsv = async () => {
     const rows = await getAllTransactions(db);
-    if (rows.length === 0) return notify('Nada que exportar', 'Todavía no hay movimientos.');
-    const content = transactionsToCsv(rows);
+    if (rows.length === 0) return notify(t.settings.nothingTitle, t.settings.nothingMsg);
+    const content = transactionsToCsv(rows, t);
     const name = `gastico-${toISODate(new Date())}.csv`;
-    const count = `${rows.length} movimiento${rows.length === 1 ? '' : 's'}`;
+    const count = t.settings.count(rows.length);
 
     if (Platform.OS === 'web') {
       const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }));
@@ -71,7 +70,7 @@ export default function AjustesScreen() {
       a.download = name;
       a.click();
       URL.revokeObjectURL(url);
-      showToast({ message: `Descargado ${name} (${count})` });
+      showToast({ message: t.settings.downloaded(name, count) });
       return;
     }
 
@@ -79,48 +78,50 @@ export default function AjustesScreen() {
     if (file.exists) file.delete();
     file.write(content);
     if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(file.uri, { mimeType: 'text/csv', UTI: 'public.comma-separated-values-text', dialogTitle: 'Exportar movimientos' });
+      await Sharing.shareAsync(file.uri, { mimeType: 'text/csv', UTI: 'public.comma-separated-values-text', dialogTitle: t.settings.exportTitle });
     } else {
-      notify('No se pudo compartir', 'Este dispositivo no permite compartir archivos.');
+      notify(t.settings.shareFailTitle, t.settings.shareFailMsg);
     }
   };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40, gap: 16 }}>
-        <Title>Ajustes</Title>
+        <Title>{t.settings.title}</Title>
 
         <Card style={{ gap: 12 }}>
-          <Label>Moneda</Label>
+          <Label>{t.settings.language}</Label>
           <View style={styles.chips}>
-            <Chip label="₡ Colones" active={currency === 'CRC'} onPress={() => changeCurrency('CRC')} />
-            <Chip label="$ Dólares" active={currency === 'USD'} onPress={() => changeCurrency('USD')} />
+            <Chip label="Español" icon="language-outline" active={lang === 'es'} onPress={() => setLang('es')} />
+            <Chip label="English" icon="language-outline" active={lang === 'en'} onPress={() => setLang('en')} />
           </View>
-          <Muted>Solo cambia el símbolo: los montos guardados no se convierten.</Muted>
-          <Label>Tema</Label>
+          <Label>{t.settings.currency}</Label>
           <View style={styles.chips}>
-            <Chip label="Sistema" icon="phone-portrait-outline" active={themeMode === 'system'} onPress={() => setThemeMode('system')} />
-            <Chip label="Claro" icon="sunny-outline" active={themeMode === 'light'} onPress={() => setThemeMode('light')} />
-            <Chip label="Oscuro" icon="moon-outline" active={themeMode === 'dark'} onPress={() => setThemeMode('dark')} />
+            <Chip label={t.settings.colones} active={currency === 'CRC'} onPress={() => changeCurrency('CRC')} />
+            <Chip label={t.settings.dollars} active={currency === 'USD'} onPress={() => changeCurrency('USD')} />
+          </View>
+          <Muted>{t.settings.currencyNote}</Muted>
+          <Label>{t.settings.theme}</Label>
+          <View style={styles.chips}>
+            <Chip label={t.settings.system} icon="phone-portrait-outline" active={themeMode === 'system'} onPress={() => setThemeMode('system')} />
+            <Chip label={t.settings.light} icon="sunny-outline" active={themeMode === 'light'} onPress={() => setThemeMode('light')} />
+            <Chip label={t.settings.dark} icon="moon-outline" active={themeMode === 'dark'} onPress={() => setThemeMode('dark')} />
           </View>
         </Card>
 
         <Card style={{ paddingVertical: 4 }}>
-          <Item icon="sparkles-outline" label="Cargar datos demo" onPress={loadDemo} />
-          <Item icon="share-outline" label="Exportar a CSV" onPress={exportCsv} />
-          <Item icon="trash-outline" label="Borrar todos los movimientos" onPress={clearAll} danger last />
+          <Item icon="sparkles-outline" label={t.settings.loadDemo} onPress={loadDemo} />
+          <Item icon="share-outline" label={t.settings.exportCsv} onPress={exportCsv} />
+          <Item icon="trash-outline" label={t.settings.clearAll} onPress={clearAll} danger last />
         </Card>
 
         <Card style={{ gap: 8 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Ionicons name="lock-closed" size={16} color={colors.primary} />
-            <Text style={{ color: colors.text, fontWeight: '700' }}>Tus datos se quedan en tu teléfono</Text>
+            <Text style={{ color: colors.text, fontWeight: '700' }}>{t.settings.privacyTitle}</Text>
           </View>
-          <Muted>
-            Gastico funciona sin internet y sin cuentas. Las facturas se leen en el dispositivo con OCR
-            {ocrAvailable ? ' (activo).' : ' (disponible en el APK; en Expo Go se ingresa el total a mano).'}
-          </Muted>
-          <Muted style={{ marginTop: 6 }}>Versión {Constants.expoConfig?.version ?? '1.0.0'}</Muted>
+          <Muted>{t.settings.privacyBody(ocrAvailable)}</Muted>
+          <Muted style={{ marginTop: 6 }}>{t.settings.version(Constants.expoConfig?.version ?? '1.0.0')}</Muted>
         </Card>
       </ScrollView>
     </SafeAreaView>
@@ -138,6 +139,7 @@ function Item({ icon, label, onPress, danger, last }: { icon: IconName; label: s
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
       style={({ pressed }) => [
         styles.item,
         { borderBottomColor: colors.border, borderBottomWidth: last ? 0 : StyleSheet.hairlineWidth, opacity: pressed ? 0.6 : 1 },

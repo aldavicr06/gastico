@@ -22,7 +22,7 @@ type Step = 'pick' | 'reading' | 'review';
 
 export default function ScanScreen() {
   const db = useSQLiteContext();
-  const { colors, currency, notifyDataChanged } = useApp();
+  const { colors, currency, notifyDataChanged, t, lang } = useApp();
   const budgetAlert = useBudgetAlert();
   const categories = useData((d) => getCategories(d, 'expense'));
 
@@ -41,7 +41,7 @@ export default function ScanScreen() {
       ? await ImagePicker.requestCameraPermissionsAsync()
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      notify('Permiso necesario', from === 'camera' ? 'Gastico necesita la cámara para leer tus facturas.' : 'Gastico necesita acceso a tus fotos.');
+      notify(t.scan.permTitle, from === 'camera' ? t.scan.permCamera : t.scan.permPhotos);
       return;
     }
     const opts: ImagePicker.ImagePickerOptions = { mediaTypes: 'images', quality: 0.9 };
@@ -108,10 +108,10 @@ export default function ScanScreen() {
 
   const header = (
     <View style={styles.header}>
-      <Pressable onPress={() => closeModal()} hitSlop={12}>
+      <Pressable onPress={() => closeModal()} hitSlop={12} accessibilityLabel={t.common.close}>
         <Ionicons name="close" size={26} color={colors.text} />
       </Pressable>
-      <Text style={[styles.headerTitle, { color: colors.text }]}>Escanear factura</Text>
+      <Text style={[styles.headerTitle, { color: colors.text }]}>{t.scan.title}</Text>
       <View style={{ width: 26 }} />
     </View>
   );
@@ -126,19 +126,17 @@ export default function ScanScreen() {
             <Ionicons name="receipt-outline" size={72} color={colors.primary} />
             <View style={[styles.scanLine, { backgroundColor: colors.primary }]} />
           </View>
-          <Text style={[styles.pickTitle, { color: colors.text }]}>Tómale foto a tu factura o voucher</Text>
-          <Muted style={{ textAlign: 'center', paddingHorizontal: 24 }}>
-            Gastico lee el total, el comercio y la fecha. Tú solo eliges la categoría.
-          </Muted>
+          <Text style={[styles.pickTitle, { color: colors.text }]}>{t.scan.pickTitle}</Text>
+          <Muted style={{ textAlign: 'center', paddingHorizontal: 24 }}>{t.scan.pickBody}</Muted>
           <View style={{ width: '100%', gap: 10, marginTop: 20 }}>
-            <Button label="Tomar foto" icon="camera" onPress={() => pick('camera')} />
-            <Button label="Elegir de la galería" icon="images-outline" variant="soft" onPress={() => pick('library')} />
+            <Button label={t.scan.takePhoto} icon="camera" onPress={() => pick('camera')} />
+            <Button label={t.scan.fromLibrary} icon="images-outline" variant="soft" onPress={() => pick('library')} />
           </View>
           <View style={styles.tips}>
-            {['Buena luz, sin sombras', 'Que se vea la línea del TOTAL', 'Funciona sin internet'].map((t) => (
-              <View key={t} style={styles.tip}>
+            {t.scan.tips.map((tip) => (
+              <View key={tip} style={styles.tip}>
                 <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
-                <Muted>{t}</Muted>
+                <Muted>{tip}</Muted>
               </View>
             ))}
           </View>
@@ -155,7 +153,7 @@ export default function ScanScreen() {
         <View style={[styles.pickWrap, { justifyContent: 'center' }]}>
           {imageUri && <Image source={{ uri: imageUri }} style={styles.readingImage} />}
           <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 24 }} />
-          <Text style={{ color: colors.text, fontWeight: '700', marginTop: 12 }}>Leyendo la factura…</Text>
+          <Text style={{ color: colors.text, fontWeight: '700', marginTop: 12 }}>{t.scan.reading}</Text>
         </View>
       </SafeAreaView>
     );
@@ -184,18 +182,18 @@ export default function ScanScreen() {
                 <Ionicons name={found ? 'sparkles' : 'create-outline'} size={14} color={found ? colors.primary : colors.warning} />
                 <Text style={{ color: found ? colors.primary : colors.warning, fontWeight: '700', fontSize: 12 }}>
                   {found
-                    ? parsed?.totalSource === 'label' ? 'Total detectado' : 'Monto más alto detectado'
-                    : ocrAvailable ? 'No encontré el total' : 'Ingresa el total'}
+                    ? parsed?.totalSource === 'label' ? t.scan.totalFound : t.scan.highestFound
+                    : ocrAvailable ? t.scan.notFound : t.scan.enterTotal}
                 </Text>
               </View>
               {!ocrAvailable && (
-                <Muted style={{ fontSize: 12 }}>La lectura automática funciona en el APK (no en Expo Go).</Muted>
+                <Muted style={{ fontSize: 12 }}>{t.scan.noOcr}</Muted>
               )}
             </View>
           </View>
 
           <Card style={{ gap: 6 }}>
-            <Muted>Total</Muted>
+            <Muted>{t.common.total}</Muted>
             <View style={styles.amountRow}>
               <Text style={[styles.amountSymbol, { color: colors.textMuted }]}>{CURRENCY_SYMBOL[currency]}</Text>
               <TextInput
@@ -209,7 +207,7 @@ export default function ScanScreen() {
             </View>
             {otherAmounts.length > 0 && (
               <View style={{ gap: 8 }}>
-                <Muted style={{ fontSize: 12 }}>¿No es ese? Otros montos en la factura:</Muted>
+                <Muted style={{ fontSize: 12 }}>{t.scan.otherAmounts}</Muted>
                 <View style={styles.wrap}>
                   {otherAmounts.map((c) => (
                     <Chip key={c} label={formatMoney(Math.round(c * 100), currency)} active={false} onPress={() => setAmount(String(c))} />
@@ -225,7 +223,7 @@ export default function ScanScreen() {
               <TextInput
                 value={merchant}
                 onChangeText={setMerchant}
-                placeholder="Comercio"
+                placeholder={t.scan.merchant}
                 placeholderTextColor={colors.textMuted}
                 style={{ flex: 1, color: colors.text, fontSize: 15 }}
               />
@@ -235,12 +233,12 @@ export default function ScanScreen() {
               style={[styles.field, { backgroundColor: colors.card, borderColor: colors.border }]}
             >
               <Ionicons name="calendar-outline" size={18} color={colors.textMuted} />
-              <Text style={{ color: colors.text, fontSize: 15 }}>{shortDate(date)}</Text>
+              <Text style={{ color: colors.text, fontSize: 15 }}>{shortDate(date, lang)}</Text>
             </Pressable>
           </View>
 
           <View style={{ gap: 10 }}>
-            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16 }}>¿Qué tipo de gasto es?</Text>
+            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16 }}>{t.scan.whatKind}</Text>
             <CategoryPicker
               categories={categories ?? []}
               selected={categoryId}
@@ -251,7 +249,7 @@ export default function ScanScreen() {
 
           {rawText.length > 0 && (
             <Pressable onPress={() => setShowRaw((s) => !s)}>
-              <Muted style={{ textAlign: 'center' }}>{showRaw ? 'Ocultar' : 'Ver'} texto detectado</Muted>
+              <Muted style={{ textAlign: 'center' }}>{t.scan.detectedText(showRaw)}</Muted>
             </Pressable>
           )}
           {showRaw && (
@@ -265,7 +263,7 @@ export default function ScanScreen() {
 
         <View style={[styles.footer, { borderTopColor: colors.border, backgroundColor: colors.bg }]}>
           <Button
-            label={!cents ? 'Ingresa el total' : !categoryId ? 'Elige la categoría' : `Guardar ${formatMoney(cents, currency)}`}
+            label={!cents ? t.scan.enterTotal : !categoryId ? t.scan.pickCategory : t.scan.saveAmount(formatMoney(cents, currency))}
             icon="checkmark"
             onPress={save}
             disabled={!cents || !categoryId}

@@ -19,7 +19,7 @@ const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'];
 /** New transaction, or edit an existing one with `/add?id=12`. */
 export default function AddScreen() {
   const db = useSQLiteContext();
-  const { colors, currency, notifyDataChanged } = useApp();
+  const { colors, currency, notifyDataChanged, t, lang } = useApp();
   const { height } = useWindowDimensions();
   const params = useLocalSearchParams<{ id?: string }>();
   const editId = params.id ? Number(params.id) : null;
@@ -112,34 +112,36 @@ export default function AddScreen() {
   // typing. On web there is no on-screen keyboard; keep the pad to avoid a layout jump.
   const hidesPad = Platform.OS !== 'web';
   const inputFocus = hidesPad ? { onFocus: () => setTyping(true), onBlur: () => setTyping(false) } : {};
-  const saveLabel = !cents ? 'Ingresa un monto' : !categoryId ? 'Elige una categoría' : original ? 'Guardar cambios' : 'Guardar';
+  const saveLabel = !cents ? t.add.enterAmount : !categoryId ? t.add.pickCategory : original ? t.add.saveChanges : t.common.save;
   const isYesterday = date === addDays(today, -1);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
       <View style={styles.header}>
-        <Pressable onPress={() => closeModal()} hitSlop={12} accessibilityLabel="Cerrar">
+        <Pressable onPress={() => closeModal()} hitSlop={12} accessibilityLabel={t.common.close}>
           <Ionicons name="close" size={26} color={colors.text} />
         </Pressable>
         <View style={[styles.segment, { backgroundColor: colors.cardAlt }]}>
-          {(['expense', 'income'] as const).map((t) => (
+          {(['expense', 'income'] as const).map((kind) => (
             <Pressable
-              key={t}
-              onPress={() => changeType(t)}
-              style={[styles.segmentItem, type === t && { backgroundColor: colors.card }]}
+              key={kind}
+              onPress={() => changeType(kind)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: type === kind }}
+              style={[styles.segmentItem, type === kind && { backgroundColor: colors.card }]}
             >
-              <Text style={{ color: type === t ? colors.text : colors.textMuted, fontWeight: '700' }}>
-                {t === 'expense' ? 'Gasto' : 'Ingreso'}
+              <Text style={{ color: type === kind ? colors.text : colors.textMuted, fontWeight: '700' }}>
+                {kind === 'expense' ? t.add.expense : t.add.income}
               </Text>
             </Pressable>
           ))}
         </View>
         {original ? (
-          <Pressable onPress={remove} hitSlop={12} accessibilityLabel="Borrar movimiento">
+          <Pressable onPress={remove} hitSlop={12} accessibilityLabel={t.add.delete}>
             <Ionicons name="trash-outline" size={24} color={colors.danger} />
           </Pressable>
         ) : (
-          <Pressable onPress={() => router.replace('/scan')} hitSlop={12} accessibilityLabel="Escanear factura">
+          <Pressable onPress={() => router.replace('/scan')} hitSlop={12} accessibilityLabel={t.add.scan}>
             <Ionicons name="scan" size={24} color={colors.primary} />
           </Pressable>
         )}
@@ -165,20 +167,20 @@ export default function AddScreen() {
 
         {/* Date: quick chips plus a day-by-day stepper for older dates. */}
         <View style={styles.dateRow}>
-          <Chip label="Hoy" icon="calendar-outline" active={date === today} onPress={() => setDate(today)} />
-          <Chip label="Ayer" active={isYesterday} onPress={() => setDate(addDays(today, -1))} />
+          <Chip label={t.add.today} icon="calendar-outline" active={date === today} onPress={() => setDate(today)} />
+          <Chip label={t.add.yesterday} active={isYesterday} onPress={() => setDate(addDays(today, -1))} />
           <View style={[styles.stepper, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Pressable onPress={() => setDate(addDays(date, -1))} hitSlop={8} accessibilityLabel="Día anterior">
+            <Pressable onPress={() => setDate(addDays(date, -1))} hitSlop={8} accessibilityLabel={t.add.prevDay}>
               <Ionicons name="chevron-back" size={18} color={colors.text} />
             </Pressable>
             <Text style={[styles.stepperText, { color: colors.text }]} numberOfLines={1}>
-              {dayLabel(date)}
+              {dayLabel(date, lang)}
             </Text>
             <Pressable
               onPress={() => date < today && setDate(addDays(date, 1))}
               hitSlop={8}
               disabled={date >= today}
-              accessibilityLabel="Día siguiente"
+              accessibilityLabel={t.add.nextDay}
             >
               <Ionicons name="chevron-forward" size={18} color={date >= today ? colors.border : colors.text} />
             </Pressable>
@@ -189,7 +191,7 @@ export default function AddScreen() {
           value={merchant}
           onChangeText={setMerchant}
           maxLength={60}
-          placeholder={type === 'expense' ? 'Comercio (opcional)' : 'De quién (opcional)'}
+          placeholder={type === 'expense' ? t.add.merchant : t.add.from}
           placeholderTextColor={colors.textMuted}
           style={inputStyle}
           {...inputFocus}
@@ -198,7 +200,7 @@ export default function AddScreen() {
           value={note}
           onChangeText={setNote}
           maxLength={140}
-          placeholder="Nota (opcional)"
+          placeholder={t.add.note}
           placeholderTextColor={colors.textMuted}
           style={inputStyle}
           {...inputFocus}
@@ -213,7 +215,7 @@ export default function AddScreen() {
               key={k}
               onPress={() => press(k)}
               onLongPress={() => k === '⌫' && setAmount('')}
-              accessibilityLabel={k === '⌫' ? 'Borrar dígito' : k === '.' ? 'Punto decimal' : k}
+              accessibilityLabel={k === '⌫' ? t.add.deleteDigit : k === '.' ? t.add.decimal : k}
               style={({ pressed }) => [styles.key, { height: keyHeight }, pressed && { backgroundColor: colors.cardAlt }]}
             >
               {k === '⌫' ? (

@@ -3,23 +3,24 @@ import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-na
 import { useApp } from '../lib/app-context';
 import type { TransactionWithCategory } from '../lib/db';
 import { formatMoney, localTime, shortDate } from '../lib/format';
+import { categoryName, type Lang } from '../lib/i18n';
 import { CategoryIcon } from './ui';
 
 /**
  * Second line under the title. Never repeats the title: when there is no
  * merchant or note the title already is the category, so show when instead.
  */
-function subtitleFor(tx: TransactionWithCategory, title: string, showDate?: boolean) {
+function subtitleFor(tx: TransactionWithCategory, title: string, category: string, lang: Lang, showDate?: boolean) {
   const parts: string[] = [];
-  if (title !== tx.category_name) parts.push(tx.category_name);
+  if (title !== category) parts.push(category);
   // The note is the title only when there is no merchant; otherwise show it here.
   if (tx.note && title !== tx.note) parts.push(tx.note);
   if (showDate) {
-    parts.push(shortDate(tx.date));
+    parts.push(shortDate(tx.date, lang));
   } else if (parts.length === 0) {
     // Creation time only makes sense if it was logged the same day it happened.
     const created = localTime(tx.created_at);
-    parts.push(created && created.date === tx.date ? created.time : shortDate(tx.date));
+    parts.push(created && created.date === tx.date ? created.time : shortDate(tx.date, lang));
   }
   return parts.join(' · ');
 }
@@ -35,20 +36,21 @@ export function TransactionRow({
   onPress?: () => void;
   onLongPress?: () => void;
 }) {
-  const { colors, currency } = useApp();
+  const { colors, currency, t, lang } = useApp();
   // On narrow screens the chevron gives its room to the name and the amount.
   const { width } = useWindowDimensions();
   const showChevron = !!onPress && width >= 360;
   const isIncome = tx.type === 'income';
-  const title = tx.merchant || tx.note || tx.category_name;
-  const subtitle = subtitleFor(tx, title, showDate);
+  const category = categoryName(t, tx.category_id, tx.category_name);
+  const title = tx.merchant || tx.note || category;
+  const subtitle = subtitleFor(tx, title, category, lang, showDate);
 
   return (
     <Pressable
       onPress={onPress}
       onLongPress={onLongPress}
       accessibilityRole={onPress ? 'button' : undefined}
-      accessibilityHint={onPress ? 'Abre el movimiento para editarlo o borrarlo' : undefined}
+      accessibilityHint={onPress ? t.transactions.rowHint : undefined}
       style={({ pressed }) => [styles.row, pressed && { opacity: 0.7 }]}
     >
       <CategoryIcon icon={tx.category_icon} color={tx.category_color} />

@@ -14,6 +14,7 @@
   - Runs 100% on-device with Google ML Kit (Android) / Apple Vision (iOS).
   - Parser handles both `12,345.67` and `12.345,67` formats, `₡`/`$`/`CRC`/`USD`, Costa Rican e-invoices ("TOTAL COMPROBANTE") and card vouchers ("MONTO"), and ignores subtotals, taxes, change and IDs.
   - If it is unsure, it shows other amounts found on the receipt as one-tap alternatives.
+- **English / Spanish:** one-tap ES | EN switch on the home screen translates every label, date and category. It starts in the phone's language, and English uses US dollars ($) while Spanish uses Costa Rican colones (₡). The demo data follows the language too: US stores in dollars, or Costa Rican stores in colones.
 - **Dashboard:** spending this month, budget progress, income/balance and a donut chart by category.
 - **Fast manual entry:** custom number pad, category grid, today/yesterday shortcuts.
 - **Transactions:** month navigation, expense/income filter, grouped by day with daily totals.

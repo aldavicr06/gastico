@@ -1,8 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { getSettings, setSetting } from './db';
+import { countTransactions, getSettings, isUntouchedDemo, seedDemoData, setSetting } from './db';
 import type { Currency } from './format';
+import { currencyFor, deviceLang, STRINGS, type Lang, type Strings } from './i18n';
 import { dark, light, type Palette } from './theme';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
@@ -19,8 +20,12 @@ type AppState = {
   colors: Palette;
   currency: Currency;
   themeMode: ThemeMode;
+  lang: Lang;
+  /** Every visible text in the current language. */
+  t: Strings;
   setCurrency: (c: Currency) => void;
   setThemeMode: (m: ThemeMode) => void;
+  setLang: (l: Lang) => Promise<void>;
   /** Increments whenever data changes, so screens know to reload. */
   dataVersion: number;
   notifyDataChanged: () => void;
@@ -35,14 +40,18 @@ const Ctx = createContext<AppState | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const db = useSQLiteContext();
   const system = useColorScheme();
-  const [currency, setCurrencyState] = useState<Currency>('CRC');
+  const [lang, setLangState] = useState<Lang>(deviceLang);
+  const [currency, setCurrencyState] = useState<Currency>(() => currencyFor(deviceLang()));
   const [themeMode, setThemeState] = useState<ThemeMode>('system');
   const [dataVersion, setDataVersion] = useState(0);
   const [toast, setToast] = useState<Toast | null>(null);
 
   useEffect(() => {
     getSettings(db).then((s) => {
+      const savedLang = s.lang === 'es' || s.lang === 'en' ? s.lang : deviceLang();
+      setLangState(savedLang);
       if (s.currency === 'CRC' || s.currency === 'USD') setCurrencyState(s.currency);
+      else setCurrencyState(currencyFor(savedLang));
       if (s.theme === 'light' || s.theme === 'dark' || s.theme === 'system') setThemeState(s.theme);
     });
   }, [db]);
@@ -58,6 +67,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [db]);
 
   const notifyDataChanged = useCallback(() => setDataVersion((v) => v + 1), []);
+
+  /**
+   * Switches every label. When there is no data of the user's own (nothing saved,
+   * or the untouched demo) the currency follows too: English → $, Spanish → ₡,
+   * and the demo reloads with stores and amounts of that country.
+   */
+  const setLang = useCallback(async (l: Lang) => {
+    setLangState(l);
+    await setSetting(db, 'lang', l);
+    if (await isUntouchedDemo(db)) {
+      setCurrency(await seedDemoData(db, l));
+      notifyDataChanged();
+    } else if ((await countTransactions(db)) === 0) {
+      setCurrency(currencyFor(l));
+    }
+  }, [db, setCurrency, notifyDataChanged]);
+
   const showToast = useCallback((t: Omit<Toast, 'id'>) => setToast({ ...t, id: Date.now() }), []);
   const hideToast = useCallback(() => setToast(null), []);
 
@@ -68,20 +94,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timer);
   }, [toast]);
 
+  // A toast in the old language would look broken after switching.
+  useEffect(() => setToast(null), [lang]);
+
   const isDark = themeMode === 'dark' || (themeMode === 'system' && system === 'dark');
 
   const value = useMemo<AppState>(() => ({
     colors: isDark ? dark : light,
     currency,
     themeMode,
+    lang,
+    t: STRINGS[lang],
     setCurrency,
     setThemeMode,
+    setLang,
     dataVersion,
     notifyDataChanged,
     toast,
     showToast,
     hideToast,
-  }), [isDark, currency, themeMode, setCurrency, setThemeMode, dataVersion, notifyDataChanged, toast, showToast, hideToast]);
+  }), [isDark, currency, themeMode, lang, setCurrency, setThemeMode, setLang, dataVersion, notifyDataChanged, toast, showToast, hideToast]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

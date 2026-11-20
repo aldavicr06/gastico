@@ -109,6 +109,37 @@ export function Chip({ label, active, onPress, icon }: { label: string; active: 
   );
 }
 
+/** Compact "ES | EN" switch: one tap changes every label in the app. */
+export function LanguageToggle() {
+  const { colors, lang, setLang, t } = useApp();
+  return (
+    <View
+      accessibilityRole="radiogroup"
+      accessibilityLabel={t.home.language}
+      style={[styles.langWrap, { backgroundColor: colors.cardAlt }]}
+    >
+      {(['es', 'en'] as const).map((l) => {
+        const active = l === lang;
+        return (
+          <Pressable
+            key={l}
+            onPress={() => !active && void setLang(l)}
+            accessibilityRole="radio"
+            accessibilityLabel={l === 'es' ? 'Español' : 'English'}
+            accessibilityState={{ selected: active }}
+            hitSlop={6}
+            style={[styles.langItem, active && { backgroundColor: colors.primary }]}
+          >
+            <Text style={{ color: active ? colors.onPrimary : colors.textMuted, fontWeight: '800', fontSize: 12 }}>
+              {l.toUpperCase()}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 export function ProgressBar({ value, color, height = 8 }: { value: number; color: string; height?: number }) {
   const { colors } = useApp();
   const pct = Math.max(0, Math.min(1, value));
@@ -151,6 +182,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   buttonText: { fontSize: 16, fontWeight: '700' },
+  langWrap: { flexDirection: 'row', borderRadius: radius.pill, padding: 3 },
+  langItem: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: radius.pill },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',

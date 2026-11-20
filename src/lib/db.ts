@@ -1,4 +1,5 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
+import { currencyFor, type Lang } from './i18n';
 import { toISODate } from './format';
 
 export type TxType = 'expense' | 'income';
@@ -100,8 +101,22 @@ export function getCategories(db: SQLiteDatabase, type?: TxType) {
     : db.getAllAsync<Category>('SELECT * FROM categories ORDER BY rowid');
 }
 
-export function setBudget(db: SQLiteDatabase, categoryId: string, cents: number | null) {
-  return db.runAsync('UPDATE categories SET budget_cents = ? WHERE id = ?', cents, categoryId);
+/**
+ * Any change made by the user means the data is no longer the untouched demo,
+ * so switching language must not replace it (see `seedDemoData`).
+ */
+function markUserData(db: SQLiteDatabase) {
+  return setSetting(db, 'demo', '0');
+}
+
+/** True while the data is exactly the demo data, with no change by the user. */
+export async function isUntouchedDemo(db: SQLiteDatabase) {
+  return (await getSettings(db)).demo === '1';
+}
+
+export async function setBudget(db: SQLiteDatabase, categoryId: string, cents: number | null) {
+  await db.runAsync('UPDATE categories SET budget_cents = ? WHERE id = ?', cents, categoryId);
+  await markUserData(db);
 }
 
 // ---------- Transactions ----------
@@ -114,6 +129,7 @@ export async function addTransaction(db: SQLiteDatabase, tx: NewTransaction) {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     tx.type, tx.amount_cents, tx.category_id, tx.note, tx.merchant, tx.date, tx.source, tx.receipt_uri,
   );
+  await markUserData(db);
   return r.lastInsertRowId;
 }
 
@@ -124,27 +140,30 @@ export function getTransaction(db: SQLiteDatabase, id: number) {
 /** Editable fields only; source, receipt and created_at keep their values. */
 export type TransactionEdit = Pick<Transaction, 'type' | 'amount_cents' | 'category_id' | 'note' | 'merchant' | 'date'>;
 
-export function updateTransaction(db: SQLiteDatabase, id: number, tx: TransactionEdit) {
-  return db.runAsync(
+export async function updateTransaction(db: SQLiteDatabase, id: number, tx: TransactionEdit) {
+  await db.runAsync(
     `UPDATE transactions
      SET type = ?, amount_cents = ?, category_id = ?, note = ?, merchant = ?, date = ?
      WHERE id = ?`,
     tx.type, tx.amount_cents, tx.category_id, tx.note, tx.merchant, tx.date, id,
   );
+  await markUserData(db);
 }
 
-export function deleteTransaction(db: SQLiteDatabase, id: number) {
-  return db.runAsync('DELETE FROM transactions WHERE id = ?', id);
+export async function deleteTransaction(db: SQLiteDatabase, id: number) {
+  await db.runAsync('DELETE FROM transactions WHERE id = ?', id);
+  await markUserData(db);
 }
 
 /** Puts a deleted transaction back exactly as it was (same id), for "Deshacer". */
-export function restoreTransaction(db: SQLiteDatabase, tx: Transaction) {
-  return db.runAsync(
+export async function restoreTransaction(db: SQLiteDatabase, tx: Transaction) {
+  await db.runAsync(
     `INSERT OR REPLACE INTO transactions
        (id, type, amount_cents, category_id, note, merchant, date, source, receipt_uri, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     tx.id, tx.type, tx.amount_cents, tx.category_id, tx.note, tx.merchant, tx.date, tx.source, tx.receipt_uri, tx.created_at,
   );
+  await markUserData(db);
 }
 
 /** Total expenses between two ISO dates, inclusive. */
@@ -244,48 +263,57 @@ export function setSetting(db: SQLiteDatabase, key: string, value: string) {
 
 export async function clearTransactions(db: SQLiteDatabase) {
   await db.runAsync('DELETE FROM transactions');
+  await markUserData(db);
 }
 
+/** Roughly 500 colones per dollar, so demo amounts look realistic in either currency. */
+const CRC_PER_USD = 500;
+
 /**
- * Fills the app with ~2 months of realistic Costa Rican spending so the
- * screens look alive for screenshots.
+ * Fills the app with ~2 months of realistic spending so the screens look alive
+ * for screenshots: Costa Rican stores in colones (es) or US stores in dollars (en).
+ * Returns the currency the amounts are in.
  */
-export async function seedDemoData(db: SQLiteDatabase) {
+export async function seedDemoData(db: SQLiteDatabase, lang: Lang = 'es') {
+  const currency = currencyFor(lang);
+  const cents = (colones: number) =>
+    currency === 'USD' ? Math.round((colones * 100) / CRC_PER_USD) : colones * 100;
   await clearTransactions(db);
 
   const budgets: Record<string, number> = {
     super: 180000, comida: 70000, transporte: 60000, casa: 40000, servicios: 55000,
     salud: 25000, entretenimiento: 30000, compras: 40000,
   };
-  for (const [id, colones] of Object.entries(budgets)) await setBudget(db, id, colones * 100);
+  for (const [id, colones] of Object.entries(budgets)) await setBudget(db, id, cents(colones));
 
-  type Seed = [daysAgo: number, cat: string, colones: number, merchant: string, source?: 'scan'];
+  type Seed = [daysAgo: number, cat: string, colones: number, merchantEs: string, merchantEn: string, source?: 'scan'];
   const thisMonth: Seed[] = [
-    [0, 'comida', 4500, 'Soda La Tía'],
-    [0, 'transporte', 25000, 'Servicentro La Galera', 'scan'],
-    [1, 'super', 38450, 'Auto Mercado', 'scan'],
-    [1, 'entretenimiento', 7990, 'Netflix'],
-    [2, 'comida', 6200, 'Starbucks'],
-    [3, 'salud', 11350, 'Farmacia Fischel', 'scan'],
-    [4, 'transporte', 3800, 'Uber'],
-    [5, 'super', 22780, 'Más x Menos', 'scan'],
-    [6, 'servicios', 18900, 'Kölbi'],
-    [7, 'comida', 12800, 'Pizza Hut'],
-    [8, 'casa', 15600, 'EPA', 'scan'],
-    [9, 'compras', 24900, 'Pequeño Mundo'],
-    [10, 'super', 41200, 'PriceSmart', 'scan'],
-    [11, 'servicios', 23450, 'CNFL'],
-    [12, 'transporte', 20000, 'Servicentro Delta'],
-    [13, 'entretenimiento', 9500, 'Cinépolis'],
-    [14, 'comida', 3200, 'Panadería Musmanni'],
+    [0, 'comida', 4500, 'Soda La Tía', "Joe's Diner"],
+    [0, 'transporte', 25000, 'Servicentro La Galera', 'Shell', 'scan'],
+    [1, 'super', 38450, 'Auto Mercado', 'Whole Foods', 'scan'],
+    [1, 'entretenimiento', 7990, 'Netflix', 'Netflix'],
+    [2, 'comida', 6200, 'Starbucks', 'Starbucks'],
+    [3, 'salud', 11350, 'Farmacia Fischel', 'CVS Pharmacy', 'scan'],
+    [4, 'transporte', 3800, 'Uber', 'Uber'],
+    [5, 'super', 22780, 'Más x Menos', 'Kroger', 'scan'],
+    [6, 'servicios', 18900, 'Kölbi', 'Verizon'],
+    [7, 'comida', 12800, 'Pizza Hut', 'Pizza Hut'],
+    [8, 'casa', 15600, 'EPA', 'The Home Depot', 'scan'],
+    [9, 'compras', 24900, 'Pequeño Mundo', 'Target'],
+    [10, 'super', 41200, 'PriceSmart', 'Costco', 'scan'],
+    [11, 'servicios', 23450, 'CNFL', 'Con Edison'],
+    [12, 'transporte', 20000, 'Servicentro Delta', 'Chevron'],
+    [13, 'entretenimiento', 9500, 'Cinépolis', 'AMC Theatres'],
+    [14, 'comida', 3200, 'Panadería Musmanni', 'Panera Bread'],
   ];
   const lastMonth: Seed[] = [
-    [33, 'super', 52300, 'Auto Mercado'], [36, 'comida', 15400, 'Restaurante Tin Jo'],
-    [38, 'transporte', 30000, 'Servicentro La Galera'], [40, 'servicios', 41200, 'ICE'],
-    [42, 'casa', 28000, 'Construplaza'], [45, 'super', 36100, 'Walmart'],
-    [48, 'salud', 18000, 'Clínica Bíblica'], [50, 'compras', 35500, 'Siman'],
-    [52, 'entretenimiento', 12000, 'Teatro Nacional'], [55, 'comida', 8900, 'KFC'],
+    [33, 'super', 52300, 'Auto Mercado', 'Whole Foods'], [36, 'comida', 15400, 'Restaurante Tin Jo', 'Olive Garden'],
+    [38, 'transporte', 30000, 'Servicentro La Galera', 'Shell'], [40, 'servicios', 41200, 'ICE', 'Comcast'],
+    [42, 'casa', 28000, 'Construplaza', "Lowe's"], [45, 'super', 36100, 'Walmart', 'Walmart'],
+    [48, 'salud', 18000, 'Clínica Bíblica', 'Urgent Care'], [50, 'compras', 35500, 'Siman', "Macy's"],
+    [52, 'entretenimiento', 12000, 'Teatro Nacional', 'Broadway show'], [55, 'comida', 8900, 'KFC', 'KFC'],
   ];
+  const paycheck = lang === 'en' ? 'Paycheck' : 'Quincena';
 
   const now = new Date();
   const dateFor = (daysAgo: number) => {
@@ -297,32 +325,35 @@ export async function seedDemoData(db: SQLiteDatabase) {
   const prevMonthStart = toISODate(new Date(now.getFullYear(), now.getMonth() - 1, 1));
 
   await db.withTransactionAsync(async () => {
-    for (const [daysAgo, cat, colones, merchant, source] of [...thisMonth, ...lastMonth]) {
+    for (const [daysAgo, cat, colones, merchantEs, merchantEn, source] of [...thisMonth, ...lastMonth]) {
       const date = dateFor(daysAgo);
       // Keep "this month" seeds inside the current month even early in the month.
       const safeDate = daysAgo < 30 && date < monthStart ? monthStart : date;
       await addTransaction(db, {
         type: 'expense',
-        amount_cents: colones * 100,
+        amount_cents: cents(colones),
         category_id: cat,
         note: null,
-        merchant,
+        merchant: lang === 'en' ? merchantEn : merchantEs,
         date: safeDate,
         source: source ?? 'manual',
         receipt_uri: null,
       });
     }
     await addTransaction(db, {
-      type: 'income', amount_cents: 850000 * 100, category_id: 'salario', note: 'Quincena',
+      type: 'income', amount_cents: cents(850000), category_id: 'salario', note: paycheck,
       merchant: null, date: monthStart, source: 'manual', receipt_uri: null,
     });
     await addTransaction(db, {
-      type: 'income', amount_cents: 120000 * 100, category_id: 'extra', note: 'Proyecto freelance',
+      type: 'income', amount_cents: cents(120000), category_id: 'extra', note: lang === 'en' ? 'Freelance project' : 'Proyecto freelance',
       merchant: null, date: dateFor(4) < monthStart ? monthStart : dateFor(4), source: 'manual', receipt_uri: null,
     });
     await addTransaction(db, {
-      type: 'income', amount_cents: 850000 * 100, category_id: 'salario', note: 'Quincena',
+      type: 'income', amount_cents: cents(850000), category_id: 'salario', note: paycheck,
       merchant: null, date: prevMonthStart, source: 'manual', receipt_uri: null,
     });
   });
+  // Last, so the writes above (which mark user data) don't undo it.
+  await setSetting(db, 'demo', '1');
+  return currency;
 }

@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useApp } from '../lib/app-context';
 import type { Category } from '../lib/db';
+import { categoryName } from '../lib/i18n';
 import { CategoryIcon } from './ui';
 
 /** 4-column grid of categories. Shows a ✨ badge on the suggested one. */
@@ -16,7 +17,7 @@ export function CategoryPicker({
   suggested?: string | null;
   onSelect: (id: string) => void;
 }) {
-  const { colors } = useApp();
+  const { colors, t } = useApp();
   return (
     <View style={styles.grid}>
       {categories.map((c) => {
@@ -34,7 +35,7 @@ export function CategoryPicker({
             ]}
           >
             <CategoryIcon icon={c.icon} color={c.color} size={36} />
-            <Text style={[styles.label, { color: colors.text }]} numberOfLines={1}>{c.name}</Text>
+            <Text style={[styles.label, { color: colors.text }]} numberOfLines={1}>{categoryName(t, c.id, c.name)}</Text>
             {suggested === c.id && (
               <View style={[styles.badge, { backgroundColor: colors.primary }]}>
                 <Ionicons name="sparkles" size={10} color={colors.onPrimary} />

@@ -7,13 +7,15 @@ import { budgetColor, Button, Card, CategoryIcon, Muted, ProgressBar, Title } fr
 import { useApp } from '../../lib/app-context';
 import { getMonthSummary, setBudget, type Category } from '../../lib/db';
 import { centsToInput, CURRENCY_SYMBOL, currentMonth, formatMoney, formatPercent, inputToCents, monthLabel, sanitizeAmountInput } from '../../lib/format';
+import { categoryName } from '../../lib/i18n';
 import { useData } from '../../lib/use-data';
 
 type Row = Category & { spent_cents: number };
 
 export default function PresupuestosScreen() {
   const db = useSQLiteContext();
-  const { colors, currency, notifyDataChanged } = useApp();
+  const { colors, currency, notifyDataChanged, t, lang } = useApp();
+  const nameOf = (r: Category) => categoryName(t, r.id, r.name);
   const month = currentMonth();
   const summary = useData((d) => getMonthSummary(d, month), [month]);
   const [editing, setEditing] = useState<Row | null>(null);
@@ -53,25 +55,25 @@ export default function PresupuestosScreen() {
           <View style={styles.rowHead}>
             <CategoryIcon icon={r.icon} color={r.color} />
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>{r.name}</Text>
+              <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>{nameOf(r)}</Text>
               {!r.budget_cents && (
-                <Muted numberOfLines={1}>{formatMoney(r.spent_cents, currency)} gastado · toca para definir</Muted>
+                <Muted numberOfLines={1}>{t.budgets.spentTapToSet(formatMoney(r.spent_cents, currency))}</Muted>
               )}
             </View>
             {r.budget_cents ? (
-              <Text style={{ color: budgetColor(ratio, colors), fontWeight: '800', fontSize: 14 }}>{formatPercent(ratio)}</Text>
+              <Text style={{ color: budgetColor(ratio, colors), fontWeight: '800', fontSize: 14 }}>{formatPercent(ratio, lang)}</Text>
             ) : null}
           </View>
           {r.budget_cents ? (
             <>
               <ProgressBar value={ratio} color={budgetColor(ratio, colors)} />
-              {/* Amounts under the bar; "Quedan" wraps below instead of being cut on narrow screens. */}
+              {/* Amounts under the bar; "left" wraps below instead of being cut on narrow screens. */}
               <View style={styles.amountsRow}>
                 <Muted>
-                  {formatMoney(r.spent_cents, currency)} de {formatMoney(r.budget_cents, currency)}
+                  {t.budgets.of(formatMoney(r.spent_cents, currency), formatMoney(r.budget_cents, currency))}
                 </Muted>
                 <Text style={{ color: left >= 0 ? colors.textMuted : colors.danger, fontWeight: '700', fontSize: 13 }}>
-                  {left >= 0 ? `Quedan ${formatMoney(left, currency)}` : `Excedido ${formatMoney(-left, currency)}`}
+                  {left >= 0 ? t.budgets.left(formatMoney(left, currency)) : t.budgets.over(formatMoney(-left, currency))}
                 </Text>
               </View>
             </>
@@ -84,12 +86,12 @@ export default function PresupuestosScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
-        <Title>Presupuestos</Title>
-        <Muted style={{ marginTop: 4, marginBottom: 16 }}>{monthLabel(month)}</Muted>
+        <Title>{t.budgets.title}</Title>
+        <Muted style={{ marginTop: 4, marginBottom: 16 }}>{monthLabel(month, true, lang)}</Muted>
 
         {totalBudget > 0 && (
           <Card style={{ marginBottom: 16, gap: 10 }}>
-            <Muted>Total presupuestado</Muted>
+            <Muted>{t.budgets.totalBudgeted}</Muted>
             <Text style={{ color: colors.text, fontSize: 26, fontWeight: '800' }}>
               {formatMoney(totalSpentBudgeted, currency)}
               <Text style={{ color: colors.textMuted, fontSize: 16, fontWeight: '600' }}> / {formatMoney(totalBudget, currency)}</Text>
@@ -103,10 +105,10 @@ export default function PresupuestosScreen() {
             <Ionicons name="warning" size={20} color={colors.warning} />
             <View style={{ flex: 1, gap: 2 }}>
               <Text style={{ color: colors.text, fontWeight: '700' }}>
-                {atRisk.length === 1 ? 'Una categoría está' : `${atRisk.length} categorías están`} cerca del límite
+                {t.budgets.nearLimit(atRisk.length)}
               </Text>
               <Muted>
-                {atRisk.map((r) => `${r.name} ${formatPercent(r.ratio)}`).join(' · ')}
+                {atRisk.map((r) => `${nameOf(r)} ${formatPercent(r.ratio, lang)}`).join(' · ')}
               </Muted>
             </View>
           </View>
@@ -114,9 +116,7 @@ export default function PresupuestosScreen() {
 
         {withBudget.map(renderRow)}
         {withBudget.length === 0 && (
-          <Muted style={{ marginBottom: 12 }}>
-            Toca una categoría para definir cuánto quieres gastar al mes. El presupuesto se repite cada mes.
-          </Muted>
+          <Muted style={{ marginBottom: 12 }}>{t.budgets.emptyHint}</Muted>
         )}
 
         {/* Nothing budgeted yet: list everything open so there is something to tap. */}
@@ -128,7 +128,7 @@ export default function PresupuestosScreen() {
             style={styles.collapse}
           >
             <Text style={{ color: colors.textMuted, fontWeight: '700', fontSize: 13, letterSpacing: 0.5 }}>
-              SIN PRESUPUESTO ({without.length})
+              {t.budgets.without(without.length)}
             </Text>
             <Ionicons name={showWithout ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
           </Pressable>
@@ -143,7 +143,7 @@ export default function PresupuestosScreen() {
             <View style={[styles.sheet, { backgroundColor: colors.card }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                 <CategoryIcon icon={editing.icon} color={editing.color} />
-                <Text style={[styles.name, { color: colors.text, fontSize: 18 }]}>Presupuesto de {editing.name}</Text>
+                <Text style={[styles.name, { color: colors.text, fontSize: 18 }]}>{t.budgets.budgetFor(nameOf(editing))}</Text>
               </View>
               <View style={[styles.inputWrap, { backgroundColor: colors.cardAlt }]}>
                 <Text style={{ color: colors.textMuted, fontSize: 24, fontWeight: '700' }}>{CURRENCY_SYMBOL[currency]}</Text>
@@ -159,8 +159,8 @@ export default function PresupuestosScreen() {
                   style={[styles.input, { color: colors.text }]}
                 />
               </View>
-              <Muted>Déjalo vacío para quitar el presupuesto.</Muted>
-              <Button label="Guardar" icon="checkmark" onPress={save} />
+              <Muted>{t.budgets.clearHint}</Muted>
+              <Button label={t.common.save} icon="checkmark" onPress={save} />
             </View>
           )}
         </KeyboardAvoidingView>

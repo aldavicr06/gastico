@@ -6,7 +6,7 @@ import { Button } from './ui';
 
 /** Renders the app's confirm / info dialogs (see lib/dialog.ts). */
 export function DialogHost() {
-  const { colors } = useApp();
+  const { colors, t } = useApp();
   const [dialog, setDialog] = useState<DialogRequest | null>(null);
 
   useEffect(() => registerDialogHost(setDialog), []);
@@ -21,7 +21,7 @@ export function DialogHost() {
   return (
     <Modal visible={!!dialog} transparent animationType="fade" onRequestClose={close}>
       <View style={styles.backdrop}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="Cerrar" />
+        <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel={t.common.close} />
         {dialog && (
           <View
             accessibilityRole="alert"
@@ -33,16 +33,16 @@ export function DialogHost() {
             <View style={styles.actions}>
               {dialog.onConfirm ? (
                 <>
-                  <Button label="Cancelar" variant="ghost" onPress={close} style={styles.button} />
+                  <Button label={t.common.cancel} variant="ghost" onPress={close} style={styles.button} />
                   <Button
-                    label={dialog.confirmLabel ?? 'Aceptar'}
+                    label={dialog.confirmLabel ?? t.common.ok}
                     variant={dialog.destructive ? 'danger' : 'primary'}
                     onPress={confirm}
                     style={styles.button}
                   />
                 </>
               ) : (
-                <Button label="Entendido" onPress={close} style={styles.button} />
+                <Button label={t.common.gotIt} onPress={close} style={styles.button} />
               )}
             </View>
           </View>
