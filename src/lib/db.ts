@@ -47,50 +47,60 @@ const DEFAULT_CATEGORIES: Omit<Category, 'budget_cents'>[] = [
   { id: 'extra', name: 'Ingreso extra', icon: 'trending-up', color: '#0EA5E9', type: 'income' },
 ];
 
-const DB_VERSION = 1;
+/**
+ * Database upgrades, one per version, applied in order on app start.
+ * The data lives on the phone and survives app updates, so:
+ * - never edit or remove a step that already shipped: add a new one at the end;
+ * - steps only add (tables, columns, indexes, rows), never drop the user's data.
+ */
+const MIGRATIONS: ((db: SQLiteDatabase) => Promise<void>)[] = [
+  // v1: initial schema and default categories.
+  async (db) => {
+    await db.execAsync(`
+      PRAGMA journal_mode = WAL;
+      CREATE TABLE IF NOT EXISTS categories (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        icon TEXT NOT NULL,
+        color TEXT NOT NULL,
+        type TEXT NOT NULL CHECK (type IN ('expense','income')),
+        budget_cents INTEGER
+      );
+      CREATE TABLE IF NOT EXISTS transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT NOT NULL CHECK (type IN ('expense','income')),
+        amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+        category_id TEXT NOT NULL REFERENCES categories(id),
+        note TEXT,
+        merchant TEXT,
+        date TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'manual',
+        receipt_uri TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_tx_date ON transactions(date);
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY NOT NULL,
+        value TEXT NOT NULL
+      );
+    `);
 
-/** Called once by <SQLiteProvider onInit>. Creates / migrates the schema. */
+    for (const c of DEFAULT_CATEGORIES) {
+      await db.runAsync(
+        'INSERT OR IGNORE INTO categories (id, name, icon, color, type, budget_cents) VALUES (?, ?, ?, ?, ?, NULL)',
+        c.id, c.name, c.icon, c.color, c.type,
+      );
+    }
+  },
+];
+
+/** Called once by <SQLiteProvider onInit>. Brings the schema up to date. */
 export async function migrate(db: SQLiteDatabase) {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-  const current = row?.user_version ?? 0;
-  if (current >= DB_VERSION) return;
-
-  await db.execAsync(`
-    PRAGMA journal_mode = WAL;
-    CREATE TABLE IF NOT EXISTS categories (
-      id TEXT PRIMARY KEY NOT NULL,
-      name TEXT NOT NULL,
-      icon TEXT NOT NULL,
-      color TEXT NOT NULL,
-      type TEXT NOT NULL CHECK (type IN ('expense','income')),
-      budget_cents INTEGER
-    );
-    CREATE TABLE IF NOT EXISTS transactions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      type TEXT NOT NULL CHECK (type IN ('expense','income')),
-      amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
-      category_id TEXT NOT NULL REFERENCES categories(id),
-      note TEXT,
-      merchant TEXT,
-      date TEXT NOT NULL,
-      source TEXT NOT NULL DEFAULT 'manual',
-      receipt_uri TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_tx_date ON transactions(date);
-    CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY NOT NULL,
-      value TEXT NOT NULL
-    );
-  `);
-
-  for (const c of DEFAULT_CATEGORIES) {
-    await db.runAsync(
-      'INSERT OR IGNORE INTO categories (id, name, icon, color, type, budget_cents) VALUES (?, ?, ?, ?, ?, NULL)',
-      c.id, c.name, c.icon, c.color, c.type,
-    );
+  for (let version = row?.user_version ?? 0; version < MIGRATIONS.length; version++) {
+    await MIGRATIONS[version](db);
+    await db.execAsync(`PRAGMA user_version = ${version + 1}`);
   }
-  await db.execAsync(`PRAGMA user_version = ${DB_VERSION}`);
 }
 
 // ---------- Categories ----------
