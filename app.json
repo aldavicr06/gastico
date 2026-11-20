@@ -2,7 +2,11 @@
   "expo": {
     "name": "Gastico",
     "slug": "gastico",
+    "owner": "aldavi89s-team",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
     "scheme": "gastico",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -50,6 +54,14 @@
     ],
     "experiments": {
       "typedRoutes": false
+    },
+    "extra": {
+      "eas": {
+        "projectId": "b16f5706-702f-474d-98ca-215c134e76a3"
+      }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/b16f5706-702f-474d-98ca-215c134e76a3"
     }
   }
 }
