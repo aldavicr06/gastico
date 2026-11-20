@@ -8,27 +8,17 @@ import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-n
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Card, Chip, Muted, Title, type IconName } from '../../components/ui';
 import { useApp } from '../../lib/app-context';
-import { clearTransactions, countTransactions, getAllTransactions, seedDemoData } from '../../lib/db';
+import { clearTransactions, getAllTransactions, seedDemoData } from '../../lib/db';
 import { transactionsToCsv } from '../../lib/csv';
 import { confirmAction, notify } from '../../lib/dialog';
-import { formatMoney, toISODate, type Currency } from '../../lib/format';
+import { toISODate } from '../../lib/format';
 import { ocrAvailable } from '../../lib/ocr';
+import { useChangeCurrency } from '../../lib/tx-actions';
 
 export default function AjustesScreen() {
   const db = useSQLiteContext();
   const { colors, currency, setCurrency, themeMode, setThemeMode, notifyDataChanged, showToast, t, lang, setLang } = useApp();
-
-  // Amounts are stored as plain numbers, so switching currency only relabels them.
-  const changeCurrency = async (c: Currency) => {
-    if (c === currency) return;
-    if ((await countTransactions(db)) === 0) return setCurrency(c);
-    confirmAction({
-      title: t.settings.switchCurrencyTitle(c === 'USD'),
-      message: t.settings.switchCurrencyMsg(formatMoney(1805200, currency), formatMoney(1805200, c)),
-      confirmLabel: t.settings.switch,
-      onConfirm: () => setCurrency(c),
-    });
-  };
+  const changeCurrency = useChangeCurrency();
 
   const loadDemo = () =>
     confirmAction({
@@ -36,8 +26,8 @@ export default function AjustesScreen() {
       message: t.settings.loadDemoMsg,
       confirmLabel: t.settings.load,
       onConfirm: async () => {
-        // The demo comes in the currency of the language: colones or dollars.
-        setCurrency(await seedDemoData(db, lang));
+        // The demo comes in the currency in use, with the stores of the language.
+        setCurrency(await seedDemoData(db, lang, currency));
         notifyDataChanged();
         showToast({ message: t.settings.demoLoaded });
       },

@@ -10,6 +10,7 @@ import { useApp } from '../../lib/app-context';
 import { getExpenseTotal, getMonthSummary, getTransactionsForMonth } from '../../lib/db';
 import { CURRENCY_SYMBOL, currentMonth, daysInMonth, formatCompact, formatMoney, formatPercent, monthLabel, shiftMonth } from '../../lib/format';
 import { categoryName, type Lang, type Strings } from '../../lib/i18n';
+import { useChangeCurrency } from '../../lib/tx-actions';
 import { useData } from '../../lib/use-data';
 
 /** Same stretch of last month: 1st up to today's day (clamped to its length). */
@@ -49,6 +50,8 @@ function fitFontSize(label: string, width: number) {
 
 export default function HomeScreen() {
   const { colors, currency, t, lang } = useApp();
+  const changeCurrency = useChangeCurrency();
+  const other = currency === 'USD' ? 'CRC' : 'USD';
   const month = currentMonth();
   const day = new Date().getDate();
   const period = previousPeriod(month, day);
@@ -84,9 +87,19 @@ export default function HomeScreen() {
           </View>
           <View style={styles.headerRight}>
             <LanguageToggle />
-            <View style={[styles.logo, { backgroundColor: colors.primary }]}>
+            {/* One tap switches ₡ ↔ $ (the badge shows it's a switch). */}
+            <Pressable
+              onPress={() => changeCurrency(other)}
+              accessibilityRole="button"
+              accessibilityLabel={t.settings.switchCurrencyA11y(other === 'USD')}
+              hitSlop={6}
+              style={({ pressed }) => [styles.logo, { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 }]}
+            >
               <Text style={{ color: colors.onPrimary, fontWeight: '900', fontSize: 18 }}>{CURRENCY_SYMBOL[currency]}</Text>
-            </View>
+              <View style={[styles.swapBadge, { backgroundColor: colors.card, borderColor: colors.primary }]}>
+                <Ionicons name="swap-horizontal" size={11} color={colors.primary} />
+              </View>
+            </Pressable>
           </View>
         </View>
 
@@ -226,6 +239,10 @@ const styles = StyleSheet.create({
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   hello: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5 },
   logo: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  swapBadge: {
+    position: 'absolute', right: -5, bottom: -5, width: 20, height: 20, borderRadius: 10,
+    borderWidth: 1.5, alignItems: 'center', justifyContent: 'center',
+  },
   hero: { borderRadius: 28, padding: 22, gap: 6 },
   heroLabel: { fontSize: 14, fontWeight: '600' },
   heroAmount: { fontSize: 40, fontWeight: '900', letterSpacing: -1, fontVariant: ['tabular-nums'] },

@@ -97,6 +97,8 @@ const es = {
     switchCurrencyMsg: (from: string, to: string) =>
       `Tus montos no se convierten: solo cambia el símbolo. Por ejemplo, ${from} se mostrará como ${to}.`,
     switch: 'Cambiar',
+    currencyChanged: (usd: boolean): string => (usd ? 'Montos en dólares ($)' : 'Montos en colones (₡)'),
+    switchCurrencyA11y: (usd: boolean): string => (usd ? 'Cambiar a dólares' : 'Cambiar a colones'),
     loadDemoMsg: 'Reemplaza tus movimientos actuales por datos de ejemplo.',
     load: 'Cargar',
     demoLoaded: 'Datos demo cargados',
@@ -259,6 +261,8 @@ const en: Strings = {
     switchCurrencyMsg: (from, to) =>
       `Your amounts are not converted, only the symbol changes. For example, ${from} will show as ${to}.`,
     switch: 'Switch',
+    currencyChanged: (usd) => (usd ? 'Amounts in US dollars ($)' : 'Amounts in colones (₡)'),
+    switchCurrencyA11y: (usd) => (usd ? 'Switch to US dollars' : 'Switch to colones'),
     loadDemoMsg: 'Replaces your current transactions with sample data.',
     load: 'Load',
     demoLoaded: 'Demo data loaded',

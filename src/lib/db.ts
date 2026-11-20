@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { currencyFor, type Lang } from './i18n';
-import { toISODate } from './format';
+import { toISODate, type Currency } from './format';
 
 export type TxType = 'expense' | 'income';
 
@@ -271,11 +271,11 @@ const CRC_PER_USD = 500;
 
 /**
  * Fills the app with ~2 months of realistic spending so the screens look alive
- * for screenshots: Costa Rican stores in colones (es) or US stores in dollars (en).
+ * for screenshots: Costa Rican stores (es) or US stores (en), with amounts in
+ * colones or dollars (by default the language's currency).
  * Returns the currency the amounts are in.
  */
-export async function seedDemoData(db: SQLiteDatabase, lang: Lang = 'es') {
-  const currency = currencyFor(lang);
+export async function seedDemoData(db: SQLiteDatabase, lang: Lang = 'es', currency: Currency = currencyFor(lang)) {
   const cents = (colones: number) =>
     currency === 'USD' ? Math.round((colones * 100) / CRC_PER_USD) : colones * 100;
   await clearTransactions(db);

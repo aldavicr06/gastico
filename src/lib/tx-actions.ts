@@ -2,8 +2,12 @@ import * as Haptics from 'expo-haptics';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback } from 'react';
 import { useApp } from './app-context';
-import { deleteTransaction, getCategoryMonth, restoreTransaction, type Transaction } from './db';
-import { formatPercent } from './format';
+import { confirmAction } from './dialog';
+import {
+  countTransactions, deleteTransaction, getCategoryMonth, isUntouchedDemo, restoreTransaction, seedDemoData,
+  type Transaction,
+} from './db';
+import { formatMoney, formatPercent, type Currency } from './format';
 import { categoryName } from './i18n';
 
 /** Deletes right away and offers "Deshacer" in a toast (no confirm dialog). */
@@ -33,6 +37,41 @@ export function useDeleteTransaction() {
       });
     },
     [db, notifyDataChanged, showToast, hideToast, t],
+  );
+}
+
+/**
+ * Switches between colones and dollars.
+ * - Untouched demo data: reloads it in the new currency (amounts converted).
+ * - No transactions: switches right away.
+ * - The user's own data: asks first, since saved amounts are only relabeled.
+ */
+export function useChangeCurrency() {
+  const db = useSQLiteContext();
+  const { currency, setCurrency, notifyDataChanged, showToast, t, lang } = useApp();
+
+  return useCallback(
+    async (c: Currency) => {
+      if (c === currency) return;
+      if (await isUntouchedDemo(db)) {
+        setCurrency(await seedDemoData(db, lang, c));
+        notifyDataChanged();
+        showToast({ message: t.settings.currencyChanged(c === 'USD') });
+        return;
+      }
+      if ((await countTransactions(db)) === 0) {
+        setCurrency(c);
+        showToast({ message: t.settings.currencyChanged(c === 'USD') });
+        return;
+      }
+      confirmAction({
+        title: t.settings.switchCurrencyTitle(c === 'USD'),
+        message: t.settings.switchCurrencyMsg(formatMoney(1805200, currency), formatMoney(1805200, c)),
+        confirmLabel: t.settings.switch,
+        onConfirm: () => setCurrency(c),
+      });
+    },
+    [db, currency, setCurrency, notifyDataChanged, showToast, t, lang],
   );
 }
 
