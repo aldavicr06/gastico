@@ -9,15 +9,24 @@ import { useApp } from './app-context';
  */
 export function useData<T>(loader: (db: SQLiteDatabase) => Promise<T>, deps: unknown[] = []) {
   const db = useSQLiteContext();
-  const { dataVersion } = useApp();
+  const { dataVersion, registerLoader, commitPendingCurrency } = useApp();
   const [data, setData] = useState<T | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       let alive = true;
-      loader(db).then((d) => alive && setData(d));
+      const unregister = registerLoader();
+      loader(db)
+        .then((d) => {
+          if (!alive) return;
+          // Same callback, so React shows the new data and a pending currency in one render.
+          setData(d);
+          commitPendingCurrency();
+        })
+        .catch(commitPendingCurrency);
       return () => {
         alive = false;
+        unregister();
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [db, dataVersion, ...deps]),

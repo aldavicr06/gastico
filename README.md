@@ -19,7 +19,13 @@
 - **Fast manual entry:** custom number pad, category grid, today/yesterday shortcuts.
 - **Transactions:** month navigation, expense/income filter, grouped by day with daily totals.
 - **Budgets per category:** green → amber → red progress bars.
-- **Settings:** ₡ colones / $ dollars, light/dark/system theme, CSV export, demo data.
+- **Import from Excel or CSV:** budgets and transactions from a spreadsheet, in Spanish or English.
+  - Finds the header in any of the first rows and maps columns by name ("Fecha"/"Date", "Monto (₡)"/"Amount"…).
+  - Recognizes categories with or without accents, in either language, plus everyday synonyms ("Supermercado" → Súper, "Luz" → Servicios).
+  - Reads amounts like `180 000`, `₡180.000,50` or `$1,234.56`, Excel date cells and `19/11/2026`, and semicolon CSVs from Spanish Excel.
+  - Review screen before saving: duplicates already in the app are skipped, unrecognized categories are flagged and fixable with a tap, and the whole import can be undone.
+  - Downloadable Excel template, and the app's own CSV export imports back (backup and restore).
+- **Settings:** ₡ colones / $ dollars (one tap from the home screen), light/dark/system theme, CSV export, demo data.
 - **Privacy-first:** everything is stored locally in SQLite. No backend, no tracking.
 
 ## Tech stack
@@ -41,13 +47,17 @@ src/
     (tabs)/            # Home, Transactions, Budgets, Settings
     add.tsx            # Manual entry modal
     scan.tsx           # Receipt scanning flow
+    import.tsx         # Excel / CSV import with review
   components/          # UI kit, donut chart, category picker, rows
   lib/
     db.ts              # Schema, migrations, queries, demo seed
     receipt.ts         # Receipt parser (pure TS, unit-tested)
+    import.ts          # Spreadsheet → budgets & transactions (pure TS, unit-tested)
+    spreadsheet.ts     # Excel (SheetJS) / CSV reading and the Excel template
+    i18n.ts            # Spanish / English texts
     ocr.ts             # On-device OCR wrapper
     format.ts          # Money & date formatting
-scripts/test-receipt.ts
+scripts/                # test-receipt.ts, test-import.ts, test-template.ts
 ```
 
 ## Getting started
@@ -59,6 +69,7 @@ npm install
 npx expo start          # scan the QR code with Expo Go
 npm run typecheck
 npm run test:receipt    # receipt parser tests
+npm run test:import     # Excel/CSV import tests
 ```
 
 > In Expo Go the OCR native module is not available. The scan screen still works (photo + manual total). Build the APK to test automatic reading.

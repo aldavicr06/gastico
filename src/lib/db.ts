@@ -214,6 +214,46 @@ export async function countTransactions(db: SQLiteDatabase) {
   return r?.n ?? 0;
 }
 
+// ---------- Import ----------
+
+/** The fields that identify a transaction when looking for duplicates. */
+export function getTransactionIdentities(db: SQLiteDatabase) {
+  return db.getAllAsync<Pick<Transaction, 'date' | 'type' | 'amount_cents' | 'merchant'>>(
+    'SELECT date, type, amount_cents, merchant FROM transactions',
+  );
+}
+
+export type ImportUndo = { ids: number[]; previousBudgets: { id: string; cents: number | null }[] };
+
+/**
+ * Saves an import in one database transaction (all or nothing) and returns
+ * what is needed to undo it.
+ */
+export async function applyImport(
+  db: SQLiteDatabase,
+  budgets: Map<string, number>,
+  transactions: NewTransaction[],
+): Promise<ImportUndo> {
+  const undo: ImportUndo = { ids: [], previousBudgets: [] };
+  await db.withTransactionAsync(async () => {
+    for (const [id, cents] of budgets) {
+      const prev = await db.getFirstAsync<{ budget_cents: number | null }>('SELECT budget_cents FROM categories WHERE id = ?', id);
+      if (!prev) continue;
+      undo.previousBudgets.push({ id, cents: prev.budget_cents });
+      await setBudget(db, id, cents);
+    }
+    for (const tx of transactions) undo.ids.push(await addTransaction(db, tx));
+  });
+  return undo;
+}
+
+export async function undoImport(db: SQLiteDatabase, undo: ImportUndo) {
+  await db.withTransactionAsync(async () => {
+    for (const id of undo.ids) await db.runAsync('DELETE FROM transactions WHERE id = ?', id);
+    for (const b of undo.previousBudgets) await setBudget(db, b.id, b.cents);
+  });
+}
+
 export function getAllTransactions(db: SQLiteDatabase) {
   return db.getAllAsync<TransactionWithCategory>(
     `SELECT t.*, c.name AS category_name, c.icon AS category_icon, c.color AS category_color

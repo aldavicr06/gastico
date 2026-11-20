@@ -12,6 +12,7 @@ const titleFor = (t: Strings, path: string): string | undefined =>
     '/ajustes': t.tabs.settings,
     '/add': t.titles.add,
     '/scan': t.titles.scan,
+    '/import': t.titles.import,
   })[path];
 
 /** Web only: keeps the browser tab title as "<Pantalla> · Gastico" while navigating. */

@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
-import { File, Paths } from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
+import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import type { ReactNode } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -10,6 +9,7 @@ import { Card, Chip, Muted, Title, type IconName } from '../../components/ui';
 import { useApp } from '../../lib/app-context';
 import { clearTransactions, getAllTransactions, seedDemoData } from '../../lib/db';
 import { transactionsToCsv } from '../../lib/csv';
+import { downloadTemplate, saveFile } from '../../lib/files';
 import { confirmAction, notify } from '../../lib/dialog';
 import { toISODate } from '../../lib/format';
 import { ocrAvailable } from '../../lib/ocr';
@@ -52,26 +52,19 @@ export default function AjustesScreen() {
     const content = transactionsToCsv(rows, t);
     const name = `gastico-${toISODate(new Date())}.csv`;
     const count = t.settings.count(rows.length);
+    const shared = await saveFile(name, content, {
+      mimeType: 'text/csv;charset=utf-8',
+      uti: 'public.comma-separated-values-text',
+      dialogTitle: t.settings.exportTitle,
+    });
+    if (!shared) return notify(t.settings.shareFailTitle, t.settings.shareFailMsg);
+    // The browser downloads silently; on phones the share sheet already confirms.
+    if (Platform.OS === 'web') showToast({ message: t.settings.downloaded(name, count) });
+  };
 
-    if (Platform.OS === 'web') {
-      const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = name;
-      a.click();
-      URL.revokeObjectURL(url);
-      showToast({ message: t.settings.downloaded(name, count) });
-      return;
-    }
-
-    const file = new File(Paths.cache, name);
-    if (file.exists) file.delete();
-    file.write(content);
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(file.uri, { mimeType: 'text/csv', UTI: 'public.comma-separated-values-text', dialogTitle: t.settings.exportTitle });
-    } else {
-      notify(t.settings.shareFailTitle, t.settings.shareFailMsg);
-    }
+  const getTemplate = async () => {
+    if (!(await downloadTemplate(db, t))) return notify(t.settings.shareFailTitle, t.settings.shareFailMsg);
+    if (Platform.OS === 'web') showToast({ message: t.importer.templateSaved(t.importer.template.fileName) });
   };
 
   return (
@@ -101,6 +94,8 @@ export default function AjustesScreen() {
 
         <Card style={{ paddingVertical: 4 }}>
           <Item icon="sparkles-outline" label={t.settings.loadDemo} onPress={loadDemo} />
+          <Item icon="cloud-upload-outline" label={t.settings.importFile} onPress={() => router.push('/import')} />
+          <Item icon="document-outline" label={t.settings.template} onPress={getTemplate} />
           <Item icon="share-outline" label={t.settings.exportCsv} onPress={exportCsv} />
           <Item icon="trash-outline" label={t.settings.clearAll} onPress={clearAll} danger last />
         </Card>

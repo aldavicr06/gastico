@@ -26,7 +26,7 @@ const es = {
     total: 'Total',
   },
   tabs: { home: 'Inicio', transactions: 'Movimientos', budgets: 'Presupuestos', settings: 'Ajustes' },
-  titles: { add: 'Agregar', edit: 'Editar movimiento', scan: 'Escanear factura' },
+  titles: { add: 'Agregar', edit: 'Editar movimiento', scan: 'Escanear factura', import: 'Importar' },
   home: {
     hello: 'Hola 👋',
     spentThisMonth: 'Gastado este mes',
@@ -87,6 +87,8 @@ const es = {
     dark: 'Oscuro',
     loadDemo: 'Cargar datos demo',
     exportCsv: 'Exportar a CSV',
+    importFile: 'Importar desde Excel o CSV',
+    template: 'Descargar plantilla de Excel',
     clearAll: 'Borrar todos los movimientos',
     privacyTitle: 'Tus datos se quedan en tu teléfono',
     privacyBody: (ocrOn: boolean) =>
@@ -171,6 +173,73 @@ const es = {
     salario: 'Salario',
     extra: 'Ingreso extra',
   } as Record<string, string>,
+  importer: {
+    title: 'Importar',
+    pickTitle: 'Importa tu presupuesto o tus movimientos',
+    pickBody: 'Elige un archivo de Excel (.xlsx) o CSV. Gastico reconoce las columnas y las categorías, y te muestra todo antes de guardar.',
+    chooseFile: 'Elegir archivo',
+    downloadTemplate: 'Descargar plantilla',
+    tips: [
+      'Presupuesto: columnas Categoría y Monto',
+      'Movimientos: Fecha, Tipo, Categoría, Comercio, Nota y Monto',
+      'También sirve el CSV que exporta Gastico',
+    ],
+    reading: 'Leyendo el archivo…',
+    readErrorTitle: 'No se pudo leer el archivo',
+    readErrorMsg: 'Revisa que sea un Excel (.xlsx) o un CSV.',
+    emptyTitle: 'No encontré datos',
+    emptyMsg:
+      'El archivo necesita una hoja con columnas como Categoría y Monto (presupuesto) o Fecha y Monto (movimientos). Descarga la plantilla para ver un ejemplo.',
+    budgets: (n: number) => `${n} presupuesto${n === 1 ? '' : 's'}`,
+    transactions: (n: number) => `${n} movimiento${n === 1 ? '' : 's'}`,
+    duplicates: (n: number) => (n === 1 ? '1 ya estaba en la app y se omite' : `${n} ya estaban en la app y se omiten`),
+    unmatched: (n: number) =>
+      n === 1 ? '1 categoría no reconocida (va a Otros): tócala para cambiarla' : `${n} categorías no reconocidas (van a Otros): tócalas para cambiarlas`,
+    skipped: (n: number) => `${n} fila${n === 1 ? '' : 's'} sin monto o fecha válidos`,
+    currencyNote: (symbol: string) => `Los montos se guardan en ${symbol}, la moneda actual.`,
+    budgetsSection: 'PRESUPUESTO MENSUAL',
+    budgetsHint: 'Las filas de la misma categoría se suman.',
+    transactionsSection: 'MOVIMIENTOS',
+    duplicate: 'Ya existe',
+    row: (n: number) => `Fila ${n}`,
+    skippedSection: (n: number) => `FILAS OMITIDAS (${n})`,
+    reason: { amount: 'monto no válido', date: 'fecha no válida' },
+    andMore: (n: number) => `y ${n} más`,
+    importButton: (b: number, tx: number): string => {
+      const parts = [b ? `${b} presupuesto${b === 1 ? '' : 's'}` : '', tx ? `${tx} movimiento${tx === 1 ? '' : 's'}` : ''];
+      return `Importar ${parts.filter(Boolean).join(' y ')}`;
+    },
+    nothingNew: 'Nada nuevo para importar',
+    done: (b: number, tx: number): string => {
+      const parts = [b ? `${b} presupuesto${b === 1 ? '' : 's'}` : '', tx ? `${tx} movimiento${tx === 1 ? '' : 's'}` : ''];
+      return `Importado: ${parts.filter(Boolean).join(' y ')}`;
+    },
+    chooseCategory: 'Elegir categoría',
+    otherFile: 'Elegir otro archivo',
+    templateSaved: (name: string) => `Descargado ${name}`,
+    template: {
+      fileName: 'gastico-plantilla.xlsx',
+      howToSheet: 'Instrucciones',
+      budgetSheet: 'Presupuesto',
+      transactionsSheet: 'Movimientos',
+      budgetHeader: ['Categoría', 'Presupuesto mensual'],
+      transactionsHeader: ['Fecha', 'Tipo', 'Categoría', 'Comercio', 'Nota', 'Monto'],
+      instructions: [
+        'Plantilla de Gastico',
+        '',
+        'Hoja "Presupuesto": escribe cuánto quieres gastar al mes en cada categoría. Deja vacías las que no uses.',
+        'Hoja "Movimientos": una fila por gasto o ingreso.',
+        '   Fecha: 19/11/2026 o 2026-11-19',
+        '   Tipo: Gasto o Ingreso',
+        '   Categoría: Súper, Comida, Transporte, Casa, Servicios, Salud, Ocio, Compras, Educación, Otros, Salario o Ingreso extra',
+        '   Comercio y Nota: opcionales',
+        '   Monto: 15000 o 15 000 (en la moneda de la app)',
+        '   Ejemplo: 19/11/2026 | Gasto | Súper | Auto Mercado | Compra semanal | 38450',
+        '',
+        'Luego, en Gastico: Ajustes → Importar desde Excel o CSV. Verás todo antes de guardar.',
+      ],
+    },
+  },
   csv: { header: 'fecha,tipo,categoria,comercio,nota,monto,origen', expense: 'gasto', income: 'ingreso' },
 };
 
@@ -186,7 +255,7 @@ const en: Strings = {
     total: 'Total',
   },
   tabs: { home: 'Home', transactions: 'Transactions', budgets: 'Budgets', settings: 'Settings' },
-  titles: { add: 'Add', edit: 'Edit transaction', scan: 'Scan receipt' },
+  titles: { add: 'Add', edit: 'Edit transaction', scan: 'Scan receipt', import: 'Import' },
   home: {
     hello: 'Hi 👋',
     spentThisMonth: 'Spent this month',
@@ -246,6 +315,8 @@ const en: Strings = {
     dark: 'Dark',
     loadDemo: 'Load demo data',
     exportCsv: 'Export to CSV',
+    importFile: 'Import from Excel or CSV',
+    template: 'Download Excel template',
     clearAll: 'Delete all transactions',
     privacyTitle: 'Your data stays on your phone',
     privacyBody: (ocrOn) =>
@@ -329,6 +400,73 @@ const en: Strings = {
     otros: 'Other',
     salario: 'Salary',
     extra: 'Extra income',
+  },
+  importer: {
+    title: 'Import',
+    pickTitle: 'Import your budget or transactions',
+    pickBody: 'Choose an Excel (.xlsx) or CSV file. Gastico recognizes the columns and categories, and shows you everything before saving.',
+    chooseFile: 'Choose file',
+    downloadTemplate: 'Download template',
+    tips: [
+      'Budget: Category and Amount columns',
+      'Transactions: Date, Type, Category, Merchant, Note and Amount',
+      'The CSV exported by Gastico works too',
+    ],
+    reading: 'Reading the file…',
+    readErrorTitle: "Couldn't read the file",
+    readErrorMsg: 'Make sure it is an Excel (.xlsx) or CSV file.',
+    emptyTitle: 'No data found',
+    emptyMsg:
+      'The file needs a sheet with columns like Category and Amount (budget) or Date and Amount (transactions). Download the template to see an example.',
+    budgets: (n) => `${n} budget${n === 1 ? '' : 's'}`,
+    transactions: (n) => `${n} transaction${n === 1 ? '' : 's'}`,
+    duplicates: (n) => (n === 1 ? '1 was already in the app and is skipped' : `${n} were already in the app and are skipped`),
+    unmatched: (n) =>
+      n === 1 ? '1 unrecognized category (goes to Other): tap it to change it' : `${n} unrecognized categories (go to Other): tap them to change them`,
+    skipped: (n) => `${n} row${n === 1 ? '' : 's'} without a valid amount or date`,
+    currencyNote: (symbol) => `Amounts are saved in ${symbol}, the current currency.`,
+    budgetsSection: 'MONTHLY BUDGET',
+    budgetsHint: 'Rows in the same category add up.',
+    transactionsSection: 'TRANSACTIONS',
+    duplicate: 'Already saved',
+    row: (n) => `Row ${n}`,
+    skippedSection: (n) => `SKIPPED ROWS (${n})`,
+    reason: { amount: 'invalid amount', date: 'invalid date' },
+    andMore: (n) => `and ${n} more`,
+    importButton: (b, tx) => {
+      const parts = [b ? `${b} budget${b === 1 ? '' : 's'}` : '', tx ? `${tx} transaction${tx === 1 ? '' : 's'}` : ''];
+      return `Import ${parts.filter(Boolean).join(' and ')}`;
+    },
+    nothingNew: 'Nothing new to import',
+    done: (b, tx) => {
+      const parts = [b ? `${b} budget${b === 1 ? '' : 's'}` : '', tx ? `${tx} transaction${tx === 1 ? '' : 's'}` : ''];
+      return `Imported ${parts.filter(Boolean).join(' and ')}`;
+    },
+    chooseCategory: 'Choose category',
+    otherFile: 'Choose another file',
+    templateSaved: (name) => `Downloaded ${name}`,
+    template: {
+      fileName: 'gastico-template.xlsx',
+      howToSheet: 'How to',
+      budgetSheet: 'Budget',
+      transactionsSheet: 'Transactions',
+      budgetHeader: ['Category', 'Monthly budget'],
+      transactionsHeader: ['Date', 'Type', 'Category', 'Merchant', 'Note', 'Amount'],
+      instructions: [
+        'Gastico template',
+        '',
+        '"Budget" sheet: enter how much you want to spend each month per category. Leave unused ones empty.',
+        '"Transactions" sheet: one row per expense or income.',
+        '   Date: 11/19/2026 or 2026-11-19',
+        '   Type: Expense or Income',
+        '   Category: Groceries, Food, Transport, Home, Utilities, Health, Leisure, Shopping, Education, Other, Salary or Extra income',
+        '   Merchant and Note: optional',
+        "   Amount: 15.50 or 1,250.00 (in the app's currency)",
+        '   Example: 11/19/2026 | Expense | Groceries | Whole Foods | Weekly groceries | 76.90',
+        '',
+        'Then, in Gastico: Settings → Import from Excel or CSV. You will see everything before saving.',
+      ],
+    },
   },
   csv: { header: 'date,type,category,merchant,note,amount,source', expense: 'expense', income: 'income' },
 };

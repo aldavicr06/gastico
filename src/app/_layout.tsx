@@ -23,6 +23,7 @@ function ThemedStack() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="add" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="scan" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="import" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
       </Stack>
       <ToastHost />
       <DialogHost />

@@ -50,11 +50,12 @@ export function useChangeCurrency() {
   return useCallback(
     async (c: Currency) => {
       if (c === currency) return;
-      setCurrency(c);
       if (await isUntouchedDemo(db)) {
-        await seedDemoData(db, lang, c);
-        notifyDataChanged();
+        // Symbol and converted amounts appear together: "₡579,24" never flashes on screen.
+        notifyDataChanged(await seedDemoData(db, lang, c));
+        return;
       }
+      setCurrency(c);
     },
     [db, currency, setCurrency, notifyDataChanged, lang],
   );

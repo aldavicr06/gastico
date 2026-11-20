@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '../lib/app-context';
 
 const TAB_BAR_HEIGHT = 64;
-const MODAL_ROUTES = ['/add', '/scan'];
+const MODAL_ROUTES = ['/add', '/scan', '/import'];
 /** Screens with the floating "+" button in the bottom-right corner. */
 const FAB_ROUTES = ['/movimientos'];
 const FAB_SIZE = 60;

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { countTransactions, getSettings, isUntouchedDemo, seedDemoData, setSetting } from './db';
@@ -28,7 +28,14 @@ type AppState = {
   setLang: (l: Lang) => Promise<void>;
   /** Increments whenever data changes, so screens know to reload. */
   dataVersion: number;
-  notifyDataChanged: () => void;
+  /**
+   * Tells screens to reload. With `nextCurrency`, the new symbol appears in the
+   * same render as the reloaded amounts, never on top of the old ones.
+   */
+  notifyDataChanged: (nextCurrency?: Currency) => void;
+  /** Used by useData: counts screens loading data, and applies a pending currency. */
+  registerLoader: () => () => void;
+  commitPendingCurrency: () => void;
   /** Snackbar shown at the bottom of the app (e.g. "Movimiento borrado · Deshacer"). */
   toast: Toast | null;
   showToast: (t: Omit<Toast, 'id'>) => void;
@@ -66,7 +73,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSetting(db, 'theme', m);
   }, [db]);
 
-  const notifyDataChanged = useCallback(() => setDataVersion((v) => v + 1), []);
+  const activeLoaders = useRef(0);
+  const pendingCurrency = useRef<Currency | null>(null);
+  const registerLoader = useCallback(() => {
+    activeLoaders.current++;
+    return () => { activeLoaders.current--; };
+  }, []);
+  const commitPendingCurrency = useCallback(() => {
+    const c = pendingCurrency.current;
+    if (!c) return;
+    pendingCurrency.current = null;
+    setCurrencyState(c);
+  }, []);
+
+  const notifyDataChanged = useCallback((nextCurrency?: Currency) => {
+    if (nextCurrency) {
+      setSetting(db, 'currency', nextCurrency);
+      if (activeLoaders.current > 0) {
+        // The screen's reload applies it together with the new data (see useData);
+        // the timer is only a safety net if that reload never finishes.
+        pendingCurrency.current = nextCurrency;
+        setTimeout(commitPendingCurrency, 3000);
+      } else {
+        setCurrencyState(nextCurrency);
+      }
+    }
+    setDataVersion((v) => v + 1);
+  }, [db, commitPendingCurrency]);
 
   /**
    * Switches every label. When there is no data of the user's own (nothing saved,
@@ -77,8 +110,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setLangState(l);
     await setSetting(db, 'lang', l);
     if (await isUntouchedDemo(db)) {
-      setCurrency(await seedDemoData(db, l));
-      notifyDataChanged();
+      notifyDataChanged(await seedDemoData(db, l));
     } else if ((await countTransactions(db)) === 0) {
       setCurrency(currencyFor(l));
     }
@@ -110,10 +142,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setLang,
     dataVersion,
     notifyDataChanged,
+    registerLoader,
+    commitPendingCurrency,
     toast,
     showToast,
     hideToast,
-  }), [isDark, currency, themeMode, lang, setCurrency, setThemeMode, setLang, dataVersion, notifyDataChanged, toast, showToast, hideToast]);
+  }), [isDark, currency, themeMode, lang, setCurrency, setThemeMode, setLang, dataVersion, notifyDataChanged, registerLoader, commitPendingCurrency, toast, showToast, hideToast]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
